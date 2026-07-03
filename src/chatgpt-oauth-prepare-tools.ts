@@ -1,8 +1,8 @@
 import type {
-  LanguageModelV2FunctionTool,
-  LanguageModelV2ProviderDefinedTool,
-  LanguageModelV2ToolChoice,
-  LanguageModelV2CallWarning,
+  LanguageModelV4FunctionTool,
+  LanguageModelV4ProviderTool,
+  LanguageModelV4ToolChoice,
+  SharedV4Warning,
 } from '@ai-sdk/provider';
 import type { ChatGPTTool, ChatGPTToolChoice } from './chatgpt-oauth-settings';
 
@@ -75,15 +75,15 @@ export function prepareChatGPTTools({
   tools,
   toolChoice,
 }: {
-  tools?: Array<LanguageModelV2FunctionTool | LanguageModelV2ProviderDefinedTool>;
-  toolChoice?: LanguageModelV2ToolChoice;
+  tools?: Array<LanguageModelV4FunctionTool | LanguageModelV4ProviderTool>;
+  toolChoice?: LanguageModelV4ToolChoice;
 }): {
   tools?: ChatGPTTool[];
   toolChoice?: ChatGPTToolChoice;
-  warnings: LanguageModelV2CallWarning[];
+  warnings: SharedV4Warning[];
   toolMapping: Map<string, string>;
 } {
-  const warnings: LanguageModelV2CallWarning[] = [];
+  const warnings: SharedV4Warning[] = [];
   const toolMapping = new Map<string, string>();
 
   // ChatGPT backend only supports its own predefined tools (shell and update_plan)
@@ -126,8 +126,8 @@ export function prepareChatGPTTools({
         // Other tools can't be directly mapped - ChatGPT doesn't support custom tools
         else {
           warnings.push({
-            type: 'unsupported-tool',
-            tool,
+            type: 'unsupported',
+            feature: `tool:${tool.name}`,
             details: 'ChatGPT backend only supports shell and update_plan tools',
           });
         }
@@ -156,8 +156,8 @@ export function prepareChatGPTTools({
       // Specific tool choice not supported, default to auto
       chatGPTToolChoice = 'auto';
       warnings.push({
-        type: 'unsupported-setting',
-        setting: 'toolChoice',
+        type: 'unsupported',
+        feature: 'toolChoice',
         details: 'Specific tool choice is not supported',
       });
     }

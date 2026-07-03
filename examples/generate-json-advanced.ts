@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
  * Advanced JSON Generation Patterns with ChatGPT OAuth
- * 
+ *
  * Production-ready patterns for generating JSON using prompt engineering,
  * including error handling, validation, retry logic, and real-world use cases.
- * 
+ *
  * Topics covered:
  * - Robust error handling and retry logic
  * - Data extraction from unstructured text
@@ -20,24 +20,24 @@ import { z } from 'zod';
 const chatgptOAuth = createChatGPTOAuth();
 
 console.log('🚀 ChatGPT OAuth: Advanced JSON Generation Patterns\n');
-console.log('=' .repeat(60));
+console.log('='.repeat(60));
 
 // Robust JSON extraction with multiple strategies
 function extractJSON(text: string): any {
   const trimmed = text.trim();
-  
+
   // Strategy 1: Direct parse
   try {
     return JSON.parse(trimmed);
   } catch {}
-  
+
   // Strategy 2: Find JSON patterns
   const patterns = [
-    /```json\s*([\s\S]*?)\s*```/,  // Code blocks
-    /\{[\s\S]*\}/,                  // Objects
-    /\[[\s\S]*\]/,                  // Arrays
+    /```json\s*([\s\S]*?)\s*```/, // Code blocks
+    /\{[\s\S]*\}/, // Objects
+    /\[[\s\S]*\]/, // Arrays
   ];
-  
+
   for (const pattern of patterns) {
     const match = trimmed.match(pattern);
     if (match) {
@@ -47,7 +47,7 @@ function extractJSON(text: string): any {
       } catch {}
     }
   }
-  
+
   throw new Error('No valid JSON found in response');
 }
 
@@ -62,42 +62,40 @@ async function generateWithRetry<T>(
   } = {}
 ): Promise<T> {
   const { maxRetries = 3, backoff = true, enhancePrompt } = options;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const enhancedPrompt = enhancePrompt 
-        ? enhancePrompt(attempt)
-        : prompt;
-      
+      const enhancedPrompt = enhancePrompt ? enhancePrompt(attempt) : prompt;
+
       const result = await generateText({
-        model: chatgptOAuth('gpt-5'),
+        model: chatgptOAuth('gpt-5.5'),
         prompt: enhancedPrompt,
       });
-      
+
       const json = extractJSON(result.text);
       return schema.parse(json);
     } catch (error) {
       console.log(`  Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
-      
+
       if (attempt === maxRetries) {
         throw new Error(`Failed after ${maxRetries} attempts: ${error.message}`);
       }
-      
+
       if (backoff) {
         const delay = Math.pow(2, attempt - 1) * 1000;
         console.log(`  Waiting ${delay}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
-  
+
   throw new Error('Unexpected error in retry logic');
 }
 
 // Example 1: Data extraction from unstructured text
 async function example1_dataExtraction() {
   console.log('\n1️⃣  Extract Structured Data from Text\n');
-  
+
   const emailText = `
     Subject: Q4 Project Update - Critical Issues
     From: sarah.chen@techcorp.com
@@ -121,7 +119,7 @@ async function example1_dataExtraction() {
     Best,
     Sarah
   `;
-  
+
   const ExtractionSchema = z.object({
     email: z.object({
       subject: z.string(),
@@ -142,11 +140,13 @@ async function example1_dataExtraction() {
       burnRate: z.number(),
       budgetRemaining: z.number(),
     }),
-    metrics: z.array(z.object({
-      name: z.string(),
-      value: z.union([z.string(), z.number()]),
-      trend: z.enum(['up', 'down', 'stable']).optional(),
-    })),
+    metrics: z.array(
+      z.object({
+        name: z.string(),
+        value: z.union([z.string(), z.number()]),
+        trend: z.enum(['up', 'down', 'stable']).optional(),
+      })
+    ),
   });
 
   const prompt = `Extract all information from this email into structured JSON:
@@ -198,7 +198,7 @@ IMPORTANT: Extract exact values from the email. Output only JSON:`;
 // Example 2: API response generation with constraints
 async function example2_apiResponse() {
   console.log('2️⃣  Generate API Response with Business Logic\n');
-  
+
   const ApiResponseSchema = z.object({
     status: z.literal('success'),
     data: z.object({
@@ -213,19 +213,23 @@ async function example2_apiResponse() {
           inStock: z.boolean(),
         }),
       }),
-      results: z.array(z.object({
-        id: z.string().uuid(),
-        name: z.string(),
-        description: z.string(),
-        price: z.number(),
-        category: z.string(),
-        stock: z.number().int().min(0),
-        rating: z.number().min(0).max(5),
-        discount: z.object({
-          percentage: z.number().min(0).max(100),
-          validUntil: z.string(),
-        }).optional(),
-      })),
+      results: z.array(
+        z.object({
+          id: z.string().uuid(),
+          name: z.string(),
+          description: z.string(),
+          price: z.number(),
+          category: z.string(),
+          stock: z.number().int().min(0),
+          rating: z.number().min(0).max(5),
+          discount: z
+            .object({
+              percentage: z.number().min(0).max(100),
+              validUntil: z.string(),
+            })
+            .optional(),
+        })
+      ),
       pagination: z.object({
         page: z.number().int().positive(),
         pageSize: z.number().int().positive(),
@@ -298,16 +302,16 @@ EXACT JSON STRUCTURE (NO DEVIATIONS):
     } else if (attempt === 2) {
       return base + jsonFormat + '\n\nIMPORTANT: Output ONLY valid JSON, no explanations:';
     } else {
-      return base + jsonFormat + '\n\nCRITICAL: Return EXACTLY the JSON structure shown above. Start with { and end with }:';
+      return (
+        base +
+        jsonFormat +
+        '\n\nCRITICAL: Return EXACTLY the JSON structure shown above. Start with { and end with }:'
+      );
     }
   };
 
   try {
-    const response = await generateWithRetry(
-      '', 
-      ApiResponseSchema,
-      { enhancePrompt }
-    );
+    const response = await generateWithRetry('', ApiResponseSchema, { enhancePrompt });
     console.log('Generated API response:');
     console.log(JSON.stringify(response, null, 2));
     console.log('✅ Valid API response with constraints\n');
@@ -319,7 +323,7 @@ EXACT JSON STRUCTURE (NO DEVIATIONS):
 // Example 3: Batch processing with validation
 async function example3_batchProcessing() {
   console.log('3️⃣  Batch Processing with Parallel Generation\n');
-  
+
   const ProductSchema = z.object({
     name: z.string(),
     brand: z.string(),
@@ -331,13 +335,13 @@ async function example3_batchProcessing() {
       currency: z.string(),
     }),
   });
-  
+
   const products = [
     'Apple MacBook Pro 14" with M3 Pro chip',
     'Sony WH-1000XM5 Wireless Noise Canceling Headphones',
     'Samsung 65" OLED 4K Smart TV',
   ];
-  
+
   const results = await Promise.all(
     products.map(async (product, index) => {
       const prompt = `Analyze this product and return detailed information:
@@ -357,7 +361,7 @@ OUTPUT THIS EXACT JSON FORMAT:
 }
 
 ONLY JSON OUTPUT:`;
-      
+
       try {
         const result = await generateWithRetry(prompt, ProductSchema, {
           maxRetries: 2,
@@ -371,8 +375,8 @@ ONLY JSON OUTPUT:`;
       }
     })
   );
-  
-  const successful = results.filter(r => r.success);
+
+  const successful = results.filter((r) => r.success);
   console.log(`\nBatch complete: ${successful.length}/${products.length} successful`);
   console.log('Results:', JSON.stringify(successful, null, 2));
   console.log();
@@ -381,33 +385,52 @@ ONLY JSON OUTPUT:`;
 // Example 4: Schema-driven form generation
 async function example4_dynamicForms() {
   console.log('4️⃣  Dynamic Form Generation from Requirements\n');
-  
+
   const FormSchema = z.object({
     form: z.object({
       id: z.string(),
       title: z.string(),
       description: z.string(),
-      sections: z.array(z.object({
-        name: z.string(),
-        fields: z.array(z.object({
-          id: z.string(),
-          label: z.string(),
-          type: z.enum(['text', 'email', 'number', 'date', 'select', 'checkbox', 'textarea', 'file']),
-          required: z.boolean(),
-          validation: z.object({
-            pattern: z.string().optional(),
-            minLength: z.number().optional(),
-            maxLength: z.number().optional(),
-            min: z.number().optional(),
-            max: z.number().optional(),
-          }).optional(),
-          options: z.array(z.object({
-            value: z.string(),
-            label: z.string(),
-          })).optional(),
-          placeholder: z.string().optional(),
-        })),
-      })),
+      sections: z.array(
+        z.object({
+          name: z.string(),
+          fields: z.array(
+            z.object({
+              id: z.string(),
+              label: z.string(),
+              type: z.enum([
+                'text',
+                'email',
+                'number',
+                'date',
+                'select',
+                'checkbox',
+                'textarea',
+                'file',
+              ]),
+              required: z.boolean(),
+              validation: z
+                .object({
+                  pattern: z.string().optional(),
+                  minLength: z.number().optional(),
+                  maxLength: z.number().optional(),
+                  min: z.number().optional(),
+                  max: z.number().optional(),
+                })
+                .optional(),
+              options: z
+                .array(
+                  z.object({
+                    value: z.string(),
+                    label: z.string(),
+                  })
+                )
+                .optional(),
+              placeholder: z.string().optional(),
+            })
+          ),
+        })
+      ),
       submitButton: z.object({
         text: z.string(),
         confirmRequired: z.boolean(),
@@ -477,7 +500,7 @@ OUTPUT ONLY JSON:`;
 // Example 5: Performance monitoring
 async function example5_performanceTracking() {
   console.log('5️⃣  Performance Tracking\n');
-  
+
   const MetricsSchema = z.object({
     endpoint: z.string(),
     method: z.string(),
@@ -489,16 +512,16 @@ async function example5_performanceTracking() {
       responseSize: z.number(),
     }),
   });
-  
+
   console.log('Generating 3 performance metrics...');
   const startTime = Date.now();
-  
+
   const endpoints = ['/api/users', '/api/products', '/api/orders'];
   const metrics = [];
-  
+
   for (const endpoint of endpoints) {
     const metricStart = Date.now();
-    
+
     const prompt = `Generate API performance metrics for ${endpoint} endpoint.
 
 OUTPUT EXACTLY THIS JSON:
@@ -515,7 +538,7 @@ OUTPUT EXACTLY THIS JSON:
 }
 
 JSON ONLY:`;
-    
+
     try {
       const metric = await generateWithRetry(prompt, MetricsSchema, {
         maxRetries: 1,
@@ -528,7 +551,7 @@ JSON ONLY:`;
       console.log(`  ✗ ${endpoint}: failed`);
     }
   }
-  
+
   const totalTime = Date.now() - startTime;
   console.log(`\nTotal generation time: ${totalTime}ms`);
   console.log('Average per request: ' + Math.round(totalTime / endpoints.length) + 'ms');
@@ -546,8 +569,8 @@ async function main() {
     await example3_batchProcessing();
     await example4_dynamicForms();
     await example5_performanceTracking();
-    
-    console.log('=' .repeat(60));
+
+    console.log('='.repeat(60));
     console.log('✅ All advanced examples completed!');
     console.log('\n🏆 Key Takeaways:');
     console.log('- Retry logic improves reliability');

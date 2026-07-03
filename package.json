@@ -1,7 +1,7 @@
 {
-  "name": "ai-sdk-provider-chatgpt-oauth",
-  "version": "1.1.0",
-  "description": "Vercel AI SDK v5 provider for ChatGPT OAuth (gpt-5) - use ChatGPT Plus/Pro/Teams subscription",
+  "name": "@grikomsn/ai-sdk-provider-chatgpt-oauth",
+  "version": "2.0.0",
+  "description": "Vercel AI SDK v7 provider for OpenAI models through ChatGPT OAuth",
   "keywords": [
     "ai-sdk",
     "chatgpt",
@@ -14,27 +14,30 @@
     "streaming",
     "vercel"
   ],
-  "homepage": "https://github.com/ben-vargas/ai-sdk-provider-chatgpt-oauth",
+  "homepage": "https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ben-vargas/ai-sdk-provider-chatgpt-oauth.git"
+    "url": "git+https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth.git"
   },
   "bugs": {
-    "url": "https://github.com/ben-vargas/ai-sdk-provider-chatgpt-oauth/issues"
+    "url": "https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth/issues"
   },
   "license": "MIT",
-  "author": "Ben Vargas",
+  "author": "Griko Nibras",
+  "contributors": [
+    "Ben Vargas"
+  ],
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     "./package.json": "./package.json",
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -48,12 +51,17 @@
     "clean": "rm -rf dist",
     "dev": "tsup --watch",
     "lint": "eslint src --max-warnings 0",
-    "format": "prettier --write \"src/**/*.ts\" \"*.md\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"*.md\"",
+    "format": "prettier --write --ignore-unknown .",
+    "format:check": "prettier --check --ignore-unknown .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
+    "typecheck:examples": "tsc --project tsconfig.examples.json",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run typecheck:examples && npm run test && npm run build",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "npm run check && changeset publish",
     "prepublishOnly": "npm run clean && npm run build",
     "example:basic": "npm run build && npx tsx examples/basic-usage.ts",
     "example:streaming": "npm run build && npx tsx examples/streaming.ts",
@@ -61,38 +69,42 @@
     "example:auth": "npm run build && npx tsx examples/check-auth.ts",
     "example:models": "npm run build && npx tsx examples/model-support.ts",
     "example:reasoning": "npm run build && npx tsx examples/reasoning-effort.ts",
-    "example:object": "npm run build && npx tsx examples/generate-object.ts",
-    "example:structured": "npm run build && npx tsx examples/structured-output.ts",
-    "example:basic-codex": "npm run build && npx tsx examples/basic-usage-gpt-5-codex.ts",
-    "example:streaming-codex": "npm run build && npx tsx examples/streaming-gpt-5-codex.ts",
-    "example:system-codex": "npm run build && npx tsx examples/system-message-gpt-5-codex.ts",
-    "example:object-codex": "npm run build && npx tsx examples/generate-json-basic-gpt-5-codex.ts"
+    "example:basic-5-4": "npm run build && npx tsx examples/basic-usage-gpt-5-4.ts",
+    "example:streaming-5-4": "npm run build && npx tsx examples/streaming-gpt-5-4.ts",
+    "example:instructions-5-4": "npm run build && npx tsx examples/instructions-gpt-5-4.ts",
+    "example:object-5-4": "npm run build && npx tsx examples/generate-json-basic-gpt-5-4.ts"
   },
   "dependencies": {
-    "@ai-sdk/provider": "2.0.0",
-    "@ai-sdk/provider-utils": "3.0.1"
+    "@ai-sdk/provider": "4.0.2",
+    "@ai-sdk/provider-utils": "5.0.5"
   },
   "devDependencies": {
-    "@eslint/js": "^9.15.0",
-    "@types/node": "^20.17.24",
-    "@typescript-eslint/eslint-plugin": "^8.16.0",
-    "@typescript-eslint/parser": "^8.16.0",
-    "@vitest/coverage-v8": "^3.0.0",
-    "ai": "^5.0.8",
-    "eslint": "^9.15.0",
-    "globals": "^16.2.0",
-    "prettier": "^3.3.3",
-    "tsup": "^8.3.5",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "vitest": "^3.0.0",
-    "zod": "^4.0.17"
+    "@changesets/cli": "2.31.0",
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.1.0",
+    "@typescript-eslint/eslint-plugin": "8.62.1",
+    "@typescript-eslint/parser": "8.62.1",
+    "@vitest/coverage-v8": "4.1.9",
+    "ai": "7.0.14",
+    "eslint": "10.6.0",
+    "globals": "17.7.0",
+    "prettier": "3.9.4",
+    "tsup": "8.5.1",
+    "tsx": "4.22.5",
+    "typescript": "6.0.3",
+    "vitest": "4.1.9",
+    "zod": "4.4.3"
   },
   "peerDependencies": {
-    "zod": "^3.0.0 || ^4.0.0"
+    "zod": "^3.25.76 || ^4.1.8"
+  },
+  "overrides": {
+    "tsup": {
+      "esbuild": "0.28.1"
+    }
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public"

@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
  * Basic JSON Generation with ChatGPT OAuth
- * 
+ *
  * This example demonstrates fundamental JSON generation patterns using
  * prompt engineering, since generateObject is not supported by the backend.
- * 
+ *
  * Topics covered:
  * - Simple objects with primitive types
  * - Basic arrays
@@ -19,7 +19,7 @@ import { z } from 'zod';
 const chatgptOAuth = createChatGPTOAuth();
 
 console.log('🎯 ChatGPT OAuth: Basic JSON Generation\n');
-console.log('=' .repeat(60));
+console.log('='.repeat(60));
 
 // Helper function to extract and parse JSON from response
 function parseJSON(text: string): any {
@@ -35,9 +35,9 @@ function parseJSON(text: string): any {
 // Example 1: Simple object with primitives
 async function example1_simpleObject() {
   console.log('\n1️⃣  Simple Object with Primitives\n');
-  
+
   const result = await generateText({
-    model: chatgptOAuth('gpt-5'),
+    model: chatgptOAuth('gpt-5.5'),
     prompt: `Generate a profile for a software developer named Sarah.
 
 OUTPUT ONLY JSON with these exact fields:
@@ -55,7 +55,7 @@ JSON OUTPUT:`,
     const profile = parseJSON(result.text);
     console.log('Generated profile:');
     console.log(JSON.stringify(profile, null, 2));
-    
+
     // Validate with Zod
     const schema = z.object({
       name: z.string(),
@@ -73,9 +73,9 @@ JSON OUTPUT:`,
 // Example 2: Object with arrays
 async function example2_arrays() {
   console.log('2️⃣  Object with Arrays\n');
-  
+
   const result = await generateText({
-    model: chatgptOAuth('gpt-5'),
+    model: chatgptOAuth('gpt-5.5'),
     prompt: `Generate data for a web development team working on e-commerce projects.
 
 RETURN ONLY THIS JSON STRUCTURE:
@@ -93,7 +93,7 @@ JSON:`,
     const team = parseJSON(result.text);
     console.log('Generated team:');
     console.log(JSON.stringify(team, null, 2));
-    
+
     const schema = z.object({
       teamName: z.string(),
       members: z.array(z.string()),
@@ -110,9 +110,9 @@ JSON:`,
 // Example 3: Optional fields
 async function example3_optionalFields() {
   console.log('3️⃣  Object with Optional Fields\n');
-  
+
   const result = await generateText({
-    model: chatgptOAuth('gpt-5'),
+    model: chatgptOAuth('gpt-5.5'),
     prompt: `Generate a product listing for a wireless keyboard.
 
 OUTPUT JSON MATCHING THIS SCHEMA:
@@ -135,7 +135,7 @@ JSON:`,
     const product = parseJSON(result.text);
     console.log('Generated product:');
     console.log(JSON.stringify(product, null, 2));
-    
+
     const schema = z.object({
       productName: z.string(),
       price: z.number(),
@@ -154,9 +154,9 @@ JSON:`,
 // Example 4: Different data types
 async function example4_dataTypes() {
   console.log('4️⃣  Various Data Types\n');
-  
+
   const result = await generateText({
-    model: chatgptOAuth('gpt-5'),
+    model: chatgptOAuth('gpt-5.5'),
     prompt: `Generate a user account with various field types.
 
 STRICT JSON FORMAT REQUIRED:
@@ -178,7 +178,7 @@ OUTPUT ONLY JSON:`,
     const account = parseJSON(result.text);
     console.log('Generated account:');
     console.log(JSON.stringify(account, null, 2));
-    
+
     const schema = z.object({
       id: z.string().uuid(),
       username: z.string().min(3).max(20),
@@ -199,10 +199,10 @@ OUTPUT ONLY JSON:`,
 // Example 5: Best practices demonstration
 async function example5_bestPractices() {
   console.log('5️⃣  Best Practices\n');
-  
+
   // Good: Clear instructions, explicit format, examples
   const result = await generateText({
-    model: chatgptOAuth('gpt-5'),
+    model: chatgptOAuth('gpt-5.5'),
     prompt: `Generate metadata for a technical blog post about TypeScript best practices.
 
 REQUIREMENTS:
@@ -247,8 +247,8 @@ async function main() {
     await example3_optionalFields();
     await example4_dataTypes();
     await example5_bestPractices();
-    
-    console.log('=' .repeat(60));
+
+    console.log('='.repeat(60));
     console.log('✅ All basic examples completed successfully!');
     console.log('\n📚 Key Takeaways:');
     console.log('- Always specify "OUTPUT ONLY JSON" or similar');

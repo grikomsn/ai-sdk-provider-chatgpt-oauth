@@ -1,24 +1,37 @@
-export type ChatGPTOAuthModelId = 'gpt-5' | 'gpt-5-codex' | 'codex-mini-latest' | (string & {});
+export type ChatGPTOAuthModelId =
+  | 'gpt-5.5'
+  | 'gpt-5.4'
+  | 'gpt-5.4-mini'
+  | 'gpt-5'
+  | 'gpt-5-codex'
+  | 'codex-mini-latest'
+  | (string & {});
 
 export const chatGPTOAuthModels = {
-  // Only models that actually work with ChatGPT OAuth API
-  'gpt-5': {
-    contextWindow: 200000,
-    maxTokens: 100000,
+  'gpt-5.5': {
+    contextWindow: 372000,
     supportsReasoning: true,
   },
-  'gpt-5-codex': {
-    contextWindow: 200000,
-    maxTokens: 100000,
+  'gpt-5.4': {
+    contextWindow: 272000,
     supportsReasoning: true,
   },
-  'codex-mini-latest': {
-    contextWindow: 200000,
-    maxTokens: 100000,
+  'gpt-5.4-mini': {
+    contextWindow: 272000,
     supportsReasoning: true,
-    localShellTool: true,
   },
 } as const;
+
+export interface ChatGPTModelInfo {
+  slug: string;
+  base_instructions?: string;
+  context_window?: number;
+  visibility?: 'list' | 'hide' | 'none' | string;
+}
+
+export interface ChatGPTModelsResponse {
+  models: ChatGPTModelInfo[];
+}
 
 export interface ChatGPTMessage {
   role: 'user' | 'assistant' | 'tool';
@@ -46,13 +59,10 @@ export interface ChatGPTTool {
 }
 
 export type ChatGPTToolChoice =
-  | 'none'
-  | 'auto'
-  | 'required'
-  | { type: 'function'; function: { name: string } };
+  'none' | 'auto' | 'required' | { type: 'function'; function: { name: string } };
 
 // Reasoning types based on OpenAI's reasoning API
-export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 export type ReasoningSummary = 'auto' | 'none' | 'concise' | 'detailed';
 
 export interface ChatGPTReasoning {
@@ -71,56 +81,6 @@ export interface ChatGPTRequest {
   store: boolean;
   stream: boolean;
   include: string[];
-}
-
-export interface ChatGPTStreamEvent {
-  id?: string;
-  object?: string;
-  created?: number;
-  model?: string;
-  choices?: Array<{
-    index: number;
-    delta?: {
-      role?: string;
-      content?: string | null;
-      tool_calls?: Array<{
-        index?: number;
-        id?: string;
-        type?: string;
-        function?: {
-          name?: string;
-          arguments?: string;
-        };
-      }>;
-    };
-    finish_reason?: string | null;
-  }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
-}
-
-export interface ChatGPTResponse {
-  id: string;
-  object: string;
-  created: number;
-  model: string;
-  choices: Array<{
-    index: number;
-    message: {
-      role: string;
-      content: string | null;
-      tool_calls?: ChatGPTToolCall[];
-    };
-    finish_reason: string | null;
-  }>;
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
 }
 
 export interface ChatGPTOAuthCredentials {

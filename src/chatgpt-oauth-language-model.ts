@@ -1,20 +1,23 @@
 import type {
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2CallWarning,
-  LanguageModelV2StreamPart,
-  LanguageModelV2Content,
-  LanguageModelV2Usage,
-  LanguageModelV2FinishReason,
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4Content,
+  LanguageModelV4GenerateResult,
+  LanguageModelV4StreamPart,
+  LanguageModelV4StreamResult,
+  LanguageModelV4Usage,
+  SharedV4Warning,
 } from '@ai-sdk/provider';
 import type { FetchFunction } from '@ai-sdk/provider-utils';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { validateToolResponse } from './tool-response-schemas';
 import type {
   ChatGPTOAuthModelId,
   ChatGPTRequest,
+  ChatGPTModelsResponse,
   ReasoningEffort,
   ReasoningSummary,
   ChatGPTReasoning,
@@ -23,6 +26,7 @@ import { convertToChatGPTMessages } from './convert-to-chatgpt-messages';
 import { prepareChatGPTTools } from './chatgpt-oauth-prepare-tools';
 import { mapChatGPTFinishReason } from './map-chatgpt-finish-reason';
 import type { AuthProvider } from './auth';
+import { ChatGPTOAuthError } from './chatgpt-oauth-error';
 
 // Load instructions file
 function loadInstructions(filename: string, fallback: string): string {
@@ -36,7 +40,10 @@ function loadInstructions(filename: string, fallback: string): string {
 }
 
 const baseInstructions = loadInstructions('codex-instructions.txt', 'You are a helpful assistant.');
-const codexModelInstructions = loadInstructions('codex-gpt5-codex-instructions.txt', baseInstructions);
+const codexModelInstructions = loadInstructions(
+  'codex-gpt5-codex-instructions.txt',
+  baseInstructions
+);
 const applyPatchInstructions = loadInstructions('codex-apply-patch-instructions.txt', '');
 
 type ChatGPTOAuthConfig = {
@@ -47,19 +54,47 @@ type ChatGPTOAuthConfig = {
   authProvider: AuthProvider;
   reasoningEffort?: ReasoningEffort | null;
   reasoningSummary?: ReasoningSummary | null;
+  instructions?: string;
 };
 
-export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
-  readonly specificationVersion = 'v2' as const;
+interface ChatGPTSseEvent {
+  type?: string;
+  delta?: string;
+  status?: string;
+  item_id?: string;
+  item?: {
+    id?: string;
+    type?: string;
+    name?: string;
+    arguments?: string;
+  };
+  response?: {
+    status?: string;
+    usage?: ChatGPTUsage;
+    error?: {
+      message?: string;
+    };
+    incomplete_details?: {
+      reason?: string;
+    };
+  };
+}
+
+interface ChatGPTUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  input_tokens_details?: { cached_tokens?: number };
+  output_tokens_details?: { reasoning_tokens?: number };
+}
+
+export class ChatGPTOAuthLanguageModel implements LanguageModelV4 {
+  readonly specificationVersion = 'v4' as const;
   readonly modelId: ChatGPTOAuthModelId;
   readonly provider: string;
-  readonly supportsImageUrls = true;
-  readonly supportsUrls = false;
-  readonly supportedUrls: Record<string, RegExp[]> = {
-    'image/*': [/^https?:\/\/.*$/],
-  };
+  readonly supportedUrls: Record<string, RegExp[]> = {};
 
   private readonly config: ChatGPTOAuthConfig;
+  private instructionsPromise?: Promise<string>;
 
   constructor(modelId: ChatGPTOAuthModelId, config: ChatGPTOAuthConfig) {
     this.modelId = modelId;
@@ -80,7 +115,7 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
   }
 
   private generateSessionId(): string {
-    return crypto.randomUUID();
+    return randomUUID();
   }
 
   /**
@@ -99,20 +134,22 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
    * For reasoning-capable models, defaults to medium effort and auto summary (matching Codex CLI).
    * Returns null if reasoning is not supported or explicitly disabled.
    */
-  private createReasoningParam(): ChatGPTReasoning | null {
+  private createReasoningParam(
+    callReasoning?: LanguageModelV4CallOptions['reasoning']
+  ): ChatGPTReasoning | null {
     // If model doesn't support reasoning, don't send reasoning params
     if (!this.supportsReasoning()) {
       return null;
     }
 
-    // If effort is explicitly set to null, disable reasoning
-    if (this.config.reasoningEffort === null) {
+    if (callReasoning === 'none' || this.config.reasoningEffort === null) {
       return null;
     }
 
-    // Use provided values or Codex CLI defaults
-    // undefined means use default, null means disable
-    const effort = this.config.reasoningEffort ?? 'medium';
+    const effort =
+      callReasoning && callReasoning !== 'provider-default'
+        ? callReasoning
+        : (this.config.reasoningEffort ?? 'medium');
     const summary = this.config.reasoningSummary ?? 'auto';
 
     // If summary is explicitly null, omit it
@@ -128,21 +165,78 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
     };
   }
 
-  private getInstructions(): string {
+  private getLegacyInstructions(): string | undefined {
     const modelName = this.modelId.toLowerCase();
     if (modelName.startsWith('codex-') || modelName.startsWith('gpt-5-codex')) {
       return codexModelInstructions;
     }
 
-    if (modelName.startsWith('gpt-5') && applyPatchInstructions) {
+    if (modelName === 'gpt-5' && applyPatchInstructions) {
       return [baseInstructions, applyPatchInstructions].join('\n');
     }
 
-    return baseInstructions;
+    return undefined;
   }
 
-  private async getArgs(options: LanguageModelV2CallOptions) {
-    const warnings: LanguageModelV2CallWarning[] = [];
+  private async getInstructions(authHeaders: Record<string, string>): Promise<string> {
+    if (this.config.instructions !== undefined) {
+      return this.config.instructions;
+    }
+
+    const legacyInstructions = this.getLegacyInstructions();
+    if (legacyInstructions !== undefined) {
+      return legacyInstructions;
+    }
+
+    if (!this.instructionsPromise) {
+      this.instructionsPromise = this.fetchModelInstructions(authHeaders);
+    }
+
+    try {
+      return await this.instructionsPromise;
+    } catch (error) {
+      this.instructionsPromise = undefined;
+      throw error;
+    }
+  }
+
+  private async fetchModelInstructions(authHeaders: Record<string, string>): Promise<string> {
+    const response = await (this.config.fetch ?? globalThis.fetch)(
+      `${this.config.baseURL}/codex/models?client_version=2.0.0`,
+      {
+        headers: {
+          Accept: 'application/json',
+          ...this.config.headers,
+          ...authHeaders,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new ChatGPTOAuthError(
+        `Unable to load the ChatGPT model catalog: ${response.status} ${response.statusText}`,
+        'MODEL_CATALOG_ERROR',
+        response.status
+      );
+    }
+
+    const catalog = (await response.json()) as ChatGPTModelsResponse;
+    const model = catalog.models?.find(({ slug }) => slug === this.modelId);
+    if (!model?.base_instructions) {
+      const availableModels = catalog.models?.map(({ slug }) => slug).join(', ');
+      throw new ChatGPTOAuthError(
+        `Model '${this.modelId}' is not available for this ChatGPT account.${
+          availableModels ? ` Available models: ${availableModels}` : ''
+        }`,
+        'MODEL_NOT_AVAILABLE'
+      );
+    }
+
+    return model.base_instructions;
+  }
+
+  private async getArgs(options: LanguageModelV4CallOptions, authHeaders: Record<string, string>) {
+    const warnings: SharedV4Warning[] = [];
 
     const { messages: chatgptMessages, warnings: messageWarnings } = convertToChatGPTMessages({
       prompt: options.prompt,
@@ -161,7 +255,7 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
     });
     warnings.push(...toolWarnings);
 
-    const reasoning = this.createReasoningParam();
+    const reasoning = this.createReasoningParam(options.reasoning);
     const include: string[] = [];
 
     // Request encrypted COT if reasoning is enabled and we're not storing responses
@@ -179,7 +273,7 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
 
     const args: ChatGPTRequest = {
       model: this.modelId,
-      instructions: this.getInstructions(),
+      instructions: await this.getInstructions(authHeaders),
       input: chatgptMessages,
       tools,
       tool_choice: toolChoice,
@@ -194,88 +288,118 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
     // but we should warn if they're provided
     if (options.temperature !== undefined) {
       warnings.push({
-        type: 'other',
-        message: 'Temperature parameter is not supported by ChatGPT backend',
+        type: 'unsupported',
+        feature: 'temperature',
+        details: 'Temperature is not supported by the ChatGPT OAuth backend',
       });
     }
     if (options.topP !== undefined) {
       warnings.push({
-        type: 'other',
-        message: 'Top-p parameter is not supported by ChatGPT backend',
+        type: 'unsupported',
+        feature: 'topP',
+        details: 'Top-p is not supported by the ChatGPT OAuth backend',
       });
     }
     if (options.maxOutputTokens !== undefined) {
       warnings.push({
-        type: 'other',
-        message: 'Max tokens parameter is not supported by ChatGPT backend',
+        type: 'unsupported',
+        feature: 'maxOutputTokens',
+        details: 'Maximum output tokens are not supported by the ChatGPT OAuth backend',
+      });
+    }
+    if (options.topK !== undefined) {
+      warnings.push({
+        type: 'unsupported',
+        feature: 'topK',
+        details: 'Top-k is not supported by the ChatGPT OAuth backend',
+      });
+    }
+    if (options.presencePenalty !== undefined) {
+      warnings.push({
+        type: 'unsupported',
+        feature: 'presencePenalty',
+        details: 'Presence penalty is not supported by the ChatGPT OAuth backend',
+      });
+    }
+    if (options.frequencyPenalty !== undefined) {
+      warnings.push({
+        type: 'unsupported',
+        feature: 'frequencyPenalty',
+        details: 'Frequency penalty is not supported by the ChatGPT OAuth backend',
+      });
+    }
+    if (options.seed !== undefined) {
+      warnings.push({
+        type: 'unsupported',
+        feature: 'seed',
+        details: 'Seeded generation is not supported by the ChatGPT OAuth backend',
+      });
+    }
+    if (options.stopSequences !== undefined && options.stopSequences.length > 0) {
+      warnings.push({
+        type: 'unsupported',
+        feature: 'stopSequences',
+        details: 'Stop sequences are not supported by the ChatGPT OAuth backend',
+      });
+    }
+    if (options.responseFormat?.type === 'json') {
+      warnings.push({
+        type: 'unsupported',
+        feature: 'responseFormat',
+        details: 'Structured response formats are not supported by the ChatGPT OAuth backend',
       });
     }
 
     return { args, warnings, toolMapping };
   }
 
-  async doGenerate(options: LanguageModelV2CallOptions): Promise<{
-    content: LanguageModelV2Content[];
-    finishReason: LanguageModelV2FinishReason;
-    usage: LanguageModelV2Usage;
-    warnings: LanguageModelV2CallWarning[];
-  }> {
-    const { args, warnings, toolMapping } = await this.getArgs(options);
+  async doGenerate(options: LanguageModelV4CallOptions): Promise<LanguageModelV4GenerateResult> {
     const authHeaders = await this.getAuthHeaders();
+    const { args, warnings, toolMapping } = await this.getArgs(options, authHeaders);
 
     // Debug logging
     if (process.env.DEBUG) {
       console.warn('Request URL:', `${this.config.baseURL}/codex/responses`);
       console.warn('Request Body:', JSON.stringify(args, null, 2));
-      console.warn('Auth Headers:', authHeaders);
+      console.warn('Request Header Names:', Object.keys(authHeaders));
       console.warn('Tools:', JSON.stringify(args.tools, null, 2));
     }
 
     // ChatGPT backend always uses streaming, even for non-streaming calls
     // We collect the stream and return the complete response
-    const response = await fetch(`${this.config.baseURL}/codex/responses`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-        ...this.config.headers,
-        ...authHeaders,
-        ...options.headers,
-      },
-      body: JSON.stringify(args),
-      signal: options.abortSignal,
-    });
+    const response = await (this.config.fetch ?? globalThis.fetch)(
+      `${this.config.baseURL}/codex/responses`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          ...this.config.headers,
+          ...authHeaders,
+          ...options.headers,
+        },
+        body: JSON.stringify(args),
+        signal: options.abortSignal,
+      }
+    );
 
     // Don't consume the body if it's not ok and it's a stream
     if (!response.ok) {
-      // Try to get error message if available
-      let errorMessage = `ChatGPT OAuth API error: ${response.status} ${response.statusText}`;
-      try {
-        // Attempt to read error body - this will only work once
-        const errorText = await response.text();
-        if (errorText) {
-          errorMessage += ` - ${errorText}`;
-        }
-      } catch {
-        // Ignore if we can't read the body
-      }
-      throw new Error(errorMessage);
+      throw await createApiError(response);
     }
 
     const reader = response.body?.getReader();
     if (!reader) {
-      throw new Error('No response body');
+      throw new ChatGPTOAuthError('ChatGPT OAuth API returned no response body', 'EMPTY_RESPONSE');
     }
 
-    const content: LanguageModelV2Content[] = [];
-    let finishReason: LanguageModelV2FinishReason = 'stop';
-    let usage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-    };
+    const content: LanguageModelV4Content[] = [];
+    let finishReason = mapChatGPTFinishReason(undefined);
+    let usage = createUsage();
 
     let currentText = '';
+    let currentReasoning = '';
+    let hadToolCall = false;
     const activeToolCalls = new Map<string, { name: string; args: string }>();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -297,68 +421,88 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
               break;
             }
 
-            try {
-              const event = JSON.parse(data);
+            const event = parseSseEvent(data);
+            if (!event) {
+              continue;
+            }
 
-              if (process.env.DEBUG) {
-                console.warn('SSE Event (doGenerate):', JSON.stringify(event, null, 2));
-              }
+            if (process.env.DEBUG) {
+              console.warn('SSE Event (doGenerate):', JSON.stringify(event, null, 2));
+            }
 
-              // Handle ChatGPT backend event format
-              switch (event.type) {
-                case 'response.output_item.added':
-                  // Handle function call initialization
-                  if (event.item && event.item.type === 'function_call') {
-                    const id = event.item.id || `call_${Date.now()}`;
-                    activeToolCalls.set(id, {
-                      name: 'pending',
-                      args: '',
+            // Handle ChatGPT backend event format
+            switch (event.type) {
+              case 'response.output_item.added':
+                // Handle function call initialization
+                if (event.item && event.item.type === 'function_call') {
+                  const id = event.item.id || `call_${Date.now()}`;
+                  activeToolCalls.set(id, {
+                    name: 'pending',
+                    args: '',
+                  });
+                }
+                break;
+
+              case 'response.output_item.done':
+                // Handle completed function calls
+                if (
+                  event.item &&
+                  event.item.type === 'function_call' &&
+                  event.item.id &&
+                  event.item.name
+                ) {
+                  const toolCallId = event.item.id;
+                  if (activeToolCalls.has(toolCallId)) {
+                    const toolCall = activeToolCalls.get(toolCallId)!;
+                    toolCall.name = event.item.name;
+                    toolCall.args = event.item.arguments || '';
+
+                    // Keep the mapping for later processing
+                    activeToolCalls.set(toolCallId, {
+                      name: toolCall.name,
+                      args: toolCall.args,
                     });
+                    hadToolCall = true;
                   }
-                  break;
+                }
+                break;
 
-                case 'response.output_item.done':
-                  // Handle completed function calls
-                  if (event.item && event.item.type === 'function_call' && event.item.name) {
-                    const toolCallId = event.item.id;
-                    if (activeToolCalls.has(toolCallId)) {
-                      const toolCall = activeToolCalls.get(toolCallId)!;
-                      toolCall.name = event.item.name;
-                      toolCall.args = event.item.arguments || '';
+              case 'response.output_text.delta':
+                currentText += event.delta || '';
+                break;
 
-                      // Keep the mapping for later processing
-                      activeToolCalls.set(toolCallId, {
-                        name: toolCall.name,
-                        args: toolCall.args,
-                      });
-                    }
-                  }
-                  break;
+              case 'response.reasoning_summary_text.delta':
+                currentReasoning += event.delta || '';
+                break;
 
-                case 'response.output_text.delta':
-                  currentText += event.delta || '';
-                  break;
+              case 'response.completed':
+                finishReason = mapChatGPTFinishReason(
+                  hadToolCall ? 'tool_calls' : (event.response?.status ?? event.status)
+                );
+                if (process.env.DEBUG_USAGE) {
+                  console.warn('response.done event:', JSON.stringify(event, null, 2));
+                }
+                if (event.response?.usage) {
+                  usage = mapUsage(event.response.usage);
+                }
+                break;
 
-                case 'response.completed':
-                  finishReason = mapChatGPTFinishReason(event.status);
-                  // Debug: log the entire event to understand structure
-                  if (process.env.DEBUG_USAGE) {
-                    console.warn('response.done event:', JSON.stringify(event, null, 2));
-                  }
-                  // Usage data is nested under response.usage
-                  if (event.response?.usage) {
-                    usage = {
-                      inputTokens: event.response.usage.input_tokens || 0,
-                      outputTokens: event.response.usage.output_tokens || 0,
-                      totalTokens:
-                        (event.response.usage.input_tokens || 0) +
-                        (event.response.usage.output_tokens || 0),
-                    };
-                  }
-                  break;
-              }
-            } catch {
-              // Ignore parse errors
+              case 'response.incomplete':
+                finishReason = mapChatGPTFinishReason(
+                  event.response?.incomplete_details?.reason === 'max_output_tokens'
+                    ? 'max_tokens'
+                    : event.response?.incomplete_details?.reason
+                );
+                if (event.response?.usage) {
+                  usage = mapUsage(event.response.usage);
+                }
+                break;
+
+              case 'response.failed':
+                throw new ChatGPTOAuthError(
+                  event.response?.error?.message ?? 'ChatGPT response failed',
+                  'RESPONSE_FAILED'
+                );
             }
           }
         }
@@ -369,6 +513,9 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
 
     if (currentText) {
       content.push({ type: 'text', text: currentText });
+    }
+    if (currentReasoning) {
+      content.unshift({ type: 'reasoning', text: currentReasoning });
     }
 
     for (const [id, toolCall] of activeToolCalls) {
@@ -386,12 +533,16 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
             input: JSON.stringify(args),
           });
         } catch (error) {
-          // Include validation errors in warnings instead of silently failing
           warnings.push({
             type: 'other',
             message: error instanceof Error ? error.message : 'Failed to parse tool arguments',
           });
-          console.error('Tool response validation error:', error);
+          content.push({
+            type: 'tool-call',
+            toolCallId: id,
+            toolName: originalName,
+            input: toolCall.args,
+          });
         }
       }
     }
@@ -401,66 +552,70 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
       finishReason,
       usage,
       warnings,
+      request: {
+        body: args,
+      },
+      response: {
+        headers: Object.fromEntries(response.headers.entries()),
+      },
     };
   }
 
-  async doStream(options: LanguageModelV2CallOptions): Promise<{
-    stream: ReadableStream<LanguageModelV2StreamPart>;
-    usage: Promise<LanguageModelV2Usage>;
-    warnings: LanguageModelV2CallWarning[];
-  }> {
-    const { args, warnings, toolMapping } = await this.getArgs(options);
+  async doStream(options: LanguageModelV4CallOptions): Promise<LanguageModelV4StreamResult> {
     const authHeaders = await this.getAuthHeaders();
+    const { args, warnings, toolMapping } = await this.getArgs(options, authHeaders);
 
-    const response = await fetch(`${this.config.baseURL}/codex/responses`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-        ...this.config.headers,
-        ...authHeaders,
-        ...options.headers,
-      },
-      body: JSON.stringify(args),
-      signal: options.abortSignal,
-    });
+    const response = await (this.config.fetch ?? globalThis.fetch)(
+      `${this.config.baseURL}/codex/responses`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          ...this.config.headers,
+          ...authHeaders,
+          ...options.headers,
+        },
+        body: JSON.stringify(args),
+        signal: options.abortSignal,
+      }
+    );
 
     // Don't consume the body if it's not ok and it's a stream
     if (!response.ok) {
-      // Try to get error message if available
-      let errorMessage = `ChatGPT OAuth API error: ${response.status} ${response.statusText}`;
-      try {
-        // Attempt to read error body - this will only work once
-        const errorText = await response.text();
-        if (errorText) {
-          errorMessage += ` - ${errorText}`;
-        }
-      } catch {
-        // Ignore if we can't read the body
-      }
-      throw new Error(errorMessage);
+      throw await createApiError(response);
     }
 
     const reader = response.body?.getReader();
     if (!reader) {
-      throw new Error('No response body');
+      throw new ChatGPTOAuthError('ChatGPT OAuth API returned no response body', 'EMPTY_RESPONSE');
     }
 
-    let usage: LanguageModelV2Usage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-    };
+    let usage = createUsage();
 
-    const activeToolCalls = new Map<string, { name: string; args: string }>();
+    const activeToolCalls = new Map<
+      string,
+      { name: string; args: string; streamStarted: boolean }
+    >();
 
-    const stream = new ReadableStream<LanguageModelV2StreamPart>({
+    const stream = new ReadableStream<LanguageModelV4StreamPart>({
       async start(controller) {
         const decoder = new TextDecoder();
         let buffer = '';
+        const textId = `text-${randomUUID()}`;
+        const reasoningId = `reasoning-${randomUUID()}`;
+        let textStarted = false;
+        let reasoningStarted = false;
+        let hadToolCall = false;
+        let streamErrored = false;
 
         try {
-          while (true) {
+          controller.enqueue({
+            type: 'stream-start',
+            warnings,
+          });
+
+          readLoop: while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
@@ -472,87 +627,139 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
               if (line.startsWith('data: ')) {
                 const data = line.slice(6);
                 if (data === '[DONE]') {
-                  controller.close();
-                  return;
+                  break readLoop;
                 }
 
-                try {
-                  const event = JSON.parse(data);
+                const event = parseSseEvent(data);
+                if (!event) {
+                  continue;
+                }
 
-                  if (process.env.DEBUG) {
-                    console.warn('SSE Event (doStream):', JSON.stringify(event, null, 2));
-                  }
+                if (process.env.DEBUG) {
+                  console.warn('SSE Event (doStream):', JSON.stringify(event, null, 2));
+                }
 
-                  // Handle ChatGPT backend event format
-                  switch (event.type) {
-                    case 'response.output_item.added':
-                      // Handle function call initialization
-                      if (event.item && event.item.type === 'function_call') {
-                        const id = event.item.id || `call_${Date.now()}`;
-                        activeToolCalls.set(id, {
-                          name: 'pending',
-                          args: '',
-                        });
-                      }
-                      break;
+                if (options.includeRawChunks) {
+                  controller.enqueue({
+                    type: 'raw',
+                    rawValue: event,
+                  });
+                }
 
-                    case 'response.output_item.done':
-                      // Handle completed function calls
-                      if (event.item && event.item.type === 'function_call' && event.item.name) {
-                        const toolCallId = event.item.id;
-                        if (activeToolCalls.has(toolCallId)) {
-                          const toolCall = activeToolCalls.get(toolCallId)!;
-                          toolCall.name = event.item.name;
-                          toolCall.args = event.item.arguments || '';
-
-                          // Map back to original tool names using toolMapping
-                          const originalName = toolMapping.get(toolCall.name) || toolCall.name;
-
-                          try {
-                            // Validate tool response against expected schema
-                            const validatedArgs = validateToolResponse(
-                              toolCall.name,
-                              toolCall.args
-                            );
-                            controller.enqueue({
-                              type: 'tool-call',
-                              toolCallId: toolCallId,
-                              toolName: originalName,
-                              input: JSON.stringify(validatedArgs),
-                            });
-                          } catch (error) {
-                            // Log validation error but still emit the tool call with original args
-                            console.error('Tool response validation error in stream:', error);
-                            controller.enqueue({
-                              type: 'tool-call',
-                              toolCallId: toolCallId,
-                              toolName: originalName,
-                              input: toolCall.args,
-                            });
-                          }
-
-                          activeToolCalls.delete(toolCallId);
-                        }
-                      }
-                      break;
-
-                    case 'response.output_text.delta':
-                      if (event.delta) {
+                // Handle ChatGPT backend event format
+                switch (event.type) {
+                  case 'response.output_item.added':
+                    // Handle function call initialization
+                    if (event.item && event.item.type === 'function_call') {
+                      const id = event.item.id || `call_${Date.now()}`;
+                      const name = event.item.name || 'pending';
+                      const originalName = toolMapping.get(name) || name;
+                      const streamStarted = name !== 'pending';
+                      activeToolCalls.set(id, {
+                        name,
+                        args: '',
+                        streamStarted,
+                      });
+                      if (streamStarted) {
                         controller.enqueue({
-                          type: 'text-delta',
-                          id: `text-${Date.now()}`,
-                          delta: event.delta,
+                          type: 'tool-input-start',
+                          id,
+                          toolName: originalName,
                         });
                       }
-                      break;
+                    }
+                    break;
 
-                    case 'response.function_call_arguments.delta':
-                      // Handle incremental tool call arguments
-                      if (event.item_id && event.delta) {
-                        if (activeToolCalls.has(event.item_id)) {
-                          const active = activeToolCalls.get(event.item_id)!;
-                          active.args += event.delta;
+                  case 'response.output_item.done':
+                    // Handle completed function calls
+                    if (
+                      event.item &&
+                      event.item.type === 'function_call' &&
+                      event.item.id &&
+                      event.item.name
+                    ) {
+                      const toolCallId = event.item.id;
+                      if (activeToolCalls.has(toolCallId)) {
+                        const toolCall = activeToolCalls.get(toolCallId)!;
+                        toolCall.name = event.item.name;
+                        toolCall.args = event.item.arguments || '';
 
+                        // Map back to original tool names using toolMapping
+                        const originalName = toolMapping.get(toolCall.name) || toolCall.name;
+
+                        if (toolCall.streamStarted) {
+                          controller.enqueue({
+                            type: 'tool-input-end',
+                            id: toolCallId,
+                          });
+                        }
+
+                        try {
+                          // Validate tool response against expected schema
+                          const validatedArgs = validateToolResponse(toolCall.name, toolCall.args);
+                          controller.enqueue({
+                            type: 'tool-call',
+                            toolCallId: toolCallId,
+                            toolName: originalName,
+                            input: JSON.stringify(validatedArgs),
+                          });
+                        } catch {
+                          controller.enqueue({
+                            type: 'tool-call',
+                            toolCallId: toolCallId,
+                            toolName: originalName,
+                            input: toolCall.args,
+                          });
+                        }
+
+                        hadToolCall = true;
+                        activeToolCalls.delete(toolCallId);
+                      }
+                    }
+                    break;
+
+                  case 'response.output_text.delta':
+                    if (event.delta) {
+                      if (!textStarted) {
+                        controller.enqueue({
+                          type: 'text-start',
+                          id: textId,
+                        });
+                        textStarted = true;
+                      }
+                      controller.enqueue({
+                        type: 'text-delta',
+                        id: textId,
+                        delta: event.delta,
+                      });
+                    }
+                    break;
+
+                  case 'response.reasoning_summary_text.delta':
+                    if (event.delta) {
+                      if (!reasoningStarted) {
+                        controller.enqueue({
+                          type: 'reasoning-start',
+                          id: reasoningId,
+                        });
+                        reasoningStarted = true;
+                      }
+                      controller.enqueue({
+                        type: 'reasoning-delta',
+                        id: reasoningId,
+                        delta: event.delta,
+                      });
+                    }
+                    break;
+
+                  case 'response.function_call_arguments.delta':
+                    // Handle incremental tool call arguments
+                    if (event.item_id && event.delta) {
+                      if (activeToolCalls.has(event.item_id)) {
+                        const active = activeToolCalls.get(event.item_id)!;
+                        active.args += event.delta;
+
+                        if (active.streamStarted) {
                           controller.enqueue({
                             type: 'tool-input-delta',
                             id: event.item_id,
@@ -560,45 +767,161 @@ export class ChatGPTOAuthLanguageModel implements LanguageModelV2 {
                           });
                         }
                       }
-                      break;
+                    }
+                    break;
 
-                    case 'response.completed':
-                      // Usage data is nested under response.usage
-                      if (event.response?.usage) {
-                        usage = {
-                          inputTokens: event.response.usage.input_tokens || 0,
-                          outputTokens: event.response.usage.output_tokens || 0,
-                          totalTokens:
-                            (event.response.usage.input_tokens || 0) +
-                            (event.response.usage.output_tokens || 0),
-                        };
-                      }
+                  case 'response.completed':
+                    if (event.response?.usage) {
+                      usage = mapUsage(event.response.usage);
+                    }
+                    if (reasoningStarted) {
                       controller.enqueue({
-                        type: 'finish',
-                        finishReason: mapChatGPTFinishReason(event.status),
-                        usage,
+                        type: 'reasoning-end',
+                        id: reasoningId,
                       });
-                      break;
-                  }
-                } catch {
-                  // Ignore parse errors
+                      reasoningStarted = false;
+                    }
+                    if (textStarted) {
+                      controller.enqueue({
+                        type: 'text-end',
+                        id: textId,
+                      });
+                      textStarted = false;
+                    }
+                    controller.enqueue({
+                      type: 'finish',
+                      finishReason: mapChatGPTFinishReason(
+                        hadToolCall ? 'tool_calls' : (event.response?.status ?? event.status)
+                      ),
+                      usage,
+                    });
+                    break;
+
+                  case 'response.incomplete':
+                    if (event.response?.usage) {
+                      usage = mapUsage(event.response.usage);
+                    }
+                    if (reasoningStarted) {
+                      controller.enqueue({
+                        type: 'reasoning-end',
+                        id: reasoningId,
+                      });
+                      reasoningStarted = false;
+                    }
+                    if (textStarted) {
+                      controller.enqueue({
+                        type: 'text-end',
+                        id: textId,
+                      });
+                      textStarted = false;
+                    }
+                    controller.enqueue({
+                      type: 'finish',
+                      finishReason: mapChatGPTFinishReason(
+                        event.response?.incomplete_details?.reason === 'max_output_tokens'
+                          ? 'max_tokens'
+                          : event.response?.incomplete_details?.reason
+                      ),
+                      usage,
+                    });
+                    break;
+
+                  case 'response.failed':
+                    throw new ChatGPTOAuthError(
+                      event.response?.error?.message ?? 'ChatGPT response failed',
+                      'RESPONSE_FAILED'
+                    );
                 }
               }
             }
           }
         } catch (error) {
+          streamErrored = true;
           controller.error(error);
         } finally {
           reader.releaseLock();
-          controller.close();
+          if (!streamErrored) {
+            controller.close();
+          }
         }
       },
     });
 
     return {
       stream,
-      usage: Promise.resolve(usage),
-      warnings,
+      request: {
+        body: args,
+      },
+      response: {
+        headers: Object.fromEntries(response.headers.entries()),
+      },
     };
   }
+}
+
+function createUsage(): LanguageModelV4Usage {
+  return {
+    inputTokens: {
+      total: 0,
+      noCache: undefined,
+      cacheRead: undefined,
+      cacheWrite: undefined,
+    },
+    outputTokens: {
+      total: 0,
+      text: undefined,
+      reasoning: undefined,
+    },
+  };
+}
+
+function parseSseEvent(data: string): ChatGPTSseEvent | undefined {
+  try {
+    const event: unknown = JSON.parse(data);
+    return event !== null && typeof event === 'object' ? (event as ChatGPTSseEvent) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function createApiError(response: Response): Promise<ChatGPTOAuthError> {
+  let detail: string | undefined;
+
+  try {
+    const body = (await response.json()) as {
+      detail?: string;
+      error?: { message?: string };
+    };
+    detail = body.error?.message ?? body.detail;
+  } catch {
+    // The status and status text still provide a stable, non-sensitive error.
+  }
+
+  const suffix = detail ? `: ${detail}` : '';
+  return new ChatGPTOAuthError(
+    `ChatGPT OAuth API error: ${response.status} ${response.statusText}${suffix}`,
+    'API_ERROR',
+    response.status
+  );
+}
+
+function mapUsage(usage: ChatGPTUsage): LanguageModelV4Usage {
+  const inputTokens = usage.input_tokens ?? 0;
+  const cachedTokens = usage.input_tokens_details?.cached_tokens;
+  const outputTokens = usage.output_tokens ?? 0;
+  const reasoningTokens = usage.output_tokens_details?.reasoning_tokens;
+
+  return {
+    inputTokens: {
+      total: inputTokens,
+      noCache: cachedTokens === undefined ? undefined : Math.max(0, inputTokens - cachedTokens),
+      cacheRead: cachedTokens,
+      cacheWrite: undefined,
+    },
+    outputTokens: {
+      total: outputTokens,
+      text: reasoningTokens === undefined ? undefined : Math.max(0, outputTokens - reasoningTokens),
+      reasoning: reasoningTokens,
+    },
+  };
 }

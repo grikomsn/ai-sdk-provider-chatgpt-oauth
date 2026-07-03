@@ -1,166 +1,69 @@
-# ChatGPT OAuth Provider Examples
+# Examples
 
-This directory contains examples demonstrating the ChatGPT OAuth provider for the Vercel AI SDK v5.
+These examples target AI SDK 7 and the current ChatGPT Codex model catalog.
 
-## Working Examples
+## Authentication and Models
 
-### ✅ Authentication & Setup
-- `check-auth.ts` - Verify OAuth credentials and authentication status
-- `model-support.ts` - Demonstrates working models (gpt-5, gpt-5-codex, codex-mini-latest) and errors for unsupported models
+- `check-auth.ts` verifies that credentials can be loaded.
+- `model-support.ts` calls the current `gpt-5.5`, `gpt-5.4`, and
+  `gpt-5.4-mini` models.
 
-### ✅ Text Generation
-- `basic-usage.ts` - Simple text generation with proper telemetry
-- `streaming.ts` - Real-time streaming responses with SSE
-- `reasoning-effort.ts` - Control reasoning depth with effort levels (low/medium/high)
+## Text and Reasoning
 
-### ✅ GPT-5 Codex Focus
-- `basic-usage-gpt-5-codex.ts` - Minimal call against the Codex-tuned model
-- `streaming-gpt-5-codex.ts` - Stream Codex responses for long-form output
-- `system-message-gpt-5-codex.ts` - Demonstrates system prompts and warnings
-- `generate-json-basic-gpt-5-codex.ts` - Prompt-engineered JSON shaping with Zod validation
+- `basic-usage.ts` generates text.
+- `streaming.ts` consumes AI SDK's `textStream`.
+- `reasoning-effort.ts` compares reasoning effort levels.
+- `basic-usage-gpt-5-4.ts` and `streaming-gpt-5-4.ts` target `gpt-5.4`.
+- `instructions-gpt-5-4.ts` uses AI SDK 7's top-level `instructions`.
 
-### ✅ Tool Calling (Codex-Style)
-- `tool-calling-basic.ts` - Simple tool calling example with clear output
-- `tool-calling-stateless.ts` - Demonstrates stateless backend (full history required)
-- `tool-calling-limitations.ts` - Shows which tools are supported vs unsupported
+## Tools
 
-## JSON Generation Examples
+- `tool-calling-basic.ts` maps a command tool to Codex `shell`.
+- `tool-calling-stateless.ts` sends full conversation history on every call.
+- `tool-calling-limitations.ts` demonstrates unsupported custom-tool warnings.
 
-### ✅ Working Approach: Prompt Engineering
+Model-generated commands are untrusted input. The examples are demonstrations;
+production applications must use a proper sandbox.
 
-Since the ChatGPT OAuth backend doesn't support `generateObject()` or custom tools, we use prompt engineering to achieve JSON output:
+## JSON
 
-- `generate-json-basic.ts` - Simple objects, arrays, and data types with validation
-- `generate-json-nested.ts` - Complex nested structures and real-world schemas  
-- `generate-json-advanced.ts` - Production patterns with retry logic and error handling
+The working JSON examples use `generateText`, `JSON.parse`, and Zod validation:
 
-### ❌ What Doesn't Work
-The `generate-object.ts`, `stream-object.ts`, and `structured-output.ts` examples **do not work** because:
+- `generate-json-basic.ts`
+- `generate-json-nested.ts`
+- `generate-json-advanced.ts`
+- `generate-json-basic-gpt-5-4.ts`
 
-1. **No Custom Tools**: Backend only supports `shell` and `update_plan` tools
-2. **Fixed Instructions**: Codex CLI instructions cannot be modified (causes errors)
-3. **No JSON Mode**: The backend ignores `responseFormat` parameters
-4. **AI SDK Incompatibility**: `generateObject()` requires custom tools which aren't supported
+AI SDK structured-output examples are intentionally omitted because the Codex
+backend does not currently support those response formats.
 
-### Backend Architecture
+## Run
 
-The ChatGPT OAuth backend (`https://chatgpt.com/backend-api/codex/responses`) follows the Codex CLI pattern:
+Authenticate with the Codex CLI first:
 
-#### Key Characteristics
-- **Models**: Supports `gpt-5`, `gpt-5-codex`, and `gpt-5-turbo-preview`
-- **Tools**: Only `shell` and `update_plan` (predefined Codex tools)
-- **Instructions**: Uses Codex CLI instructions for optimal performance
-- **Streaming**: Always uses Server-Sent Events (SSE)
-- **Telemetry**: Provides accurate token usage tracking
-- **STATELESS**: Backend doesn't maintain conversation state between requests
-
-#### Tool System
-- **Codex Pattern**: All tools are CLI commands executed via `shell`
-- **No Custom Functions**: Can't define arbitrary function tools
-- **Tool Mapping**: Provider maps user tool names to Codex tools
-
-#### Parameters Not Supported
-- `temperature` - Model uses default settings
-- `topP` - Sampling parameters fixed
-- `maxTokens` - Output length managed by model
-- `responseFormat` - No JSON mode available
-
-## Running Examples
-
-First, ensure you're authenticated with ChatGPT OAuth:
 ```bash
-# The provider reads credentials from ~/.codex/auth.json
-# Make sure you have valid ChatGPT OAuth tokens
+codex login
 ```
 
-Then run any example:
+Then use the package scripts:
 
-**Working Examples:**
 ```bash
-# Authentication & Models
-npx tsx examples/check-auth.ts       # Check authentication
-npx tsx examples/model-support.ts    # Test model support
-
-# Text Generation
-npx tsx examples/basic-usage.ts              # Basic text generation
-npx tsx examples/streaming.ts                # Streaming responses
-npx tsx examples/reasoning-effort.ts         # Reasoning with different effort levels
-npx tsx examples/basic-usage-gpt-5-codex.ts       # Codex-tuned basic call
-npx tsx examples/streaming-gpt-5-codex.ts         # Codex streaming demo
-npx tsx examples/system-message-gpt-5-codex.ts    # System message handling
-npx tsx examples/generate-json-basic-gpt-5-codex.ts # Prompt-engineered JSON output
-
-# Tool Calling
-npx tsx examples/tool-calling-basic.ts       # Simple tool calling
-npx tsx examples/tool-calling-stateless.ts   # Stateless backend demo
-npx tsx examples/tool-calling-limitations.ts # Tool support info
+npm run example:auth
+npm run example:models
+npm run example:basic
+npm run example:streaming
+npm run example:reasoning
+npm run example:tools
+npm run example:basic-5-4
+npm run example:streaming-5-4
+npm run example:instructions-5-4
 ```
 
-**Examples That Show Limitations:**
+All example sources are checked without making network calls:
+
 ```bash
-# These demonstrate what doesn't work
-npx tsx examples/generate-object.ts    # No JSON mode
-npx tsx examples/stream-object.ts      # No streaming objects
-npx tsx examples/structured-output.ts  # No structured output
+npm run typecheck:examples
 ```
 
-Or use npm scripts:
-```bash
-npm run example:auth          # Check authentication
-npm run example:models        # Test model support
-npm run example:basic         # Basic text generation
-npm run example:streaming     # Streaming
-npm run example:reasoning     # Reasoning effort levels
-npm run example:basic-codex     # Codex basic usage
-npm run example:streaming-codex # Codex streaming demo
-npm run example:system-codex    # Codex system message handling
-npm run example:object-codex    # Codex JSON generation with Zod
-npm run example:tools         # Tool calling basic example
-npm run example:object        # Object generation (fails)
-npm run example:structured    # Structured output (fails)
-```
-
-## Important Concepts
-
-### Stateless Backend
-The ChatGPT OAuth backend is **stateless** - it doesn't remember previous messages. You must send the full conversation history with each request:
-
-```typescript
-const messages: CoreMessage[] = [];
-
-// First message
-messages.push({ role: 'user', content: 'Question 1' });
-const response1 = await generateText({ model, messages });
-messages.push({ role: 'assistant', content: response1.text });
-
-// Second message - must include ALL history
-messages.push({ role: 'user', content: 'Question 2' });
-const response2 = await generateText({ model, messages });
-```
-
-### Tool Limitations
-Only two tools are supported:
-- **`bash`** - Maps to the `shell` tool internally
-- **`TodoWrite`** - Maps to the `update_plan` tool internally
-
-All other tools will generate warnings and be ignored.
-
-### Tool Response Pattern
-The model describes what it will do but doesn't automatically interpret tool results. This is the Codex CLI pattern - tools execute and show output directly rather than being interpreted by the model.
-
-## Best Use Cases
-
-✅ **Ideal For:**
-- Coding assistants with gpt-5 or gpt-5-codex access
-- CLI automation and scripting
-- Task planning and execution
-- Integration with existing CLI tools
-- Codex CLI ecosystem applications
-
-❌ **Not Suitable For:**
-- Structured data generation (no JSON mode)
-- Custom function tools (weather APIs, databases)
-- Applications needing temperature control
-- General-purpose chatbots
-
-For these use cases, consider standard OpenAI API or other providers.
+For a fresh browser-based PKCE flow and live assertions, use
+[`oauth-example`](../oauth-example/).

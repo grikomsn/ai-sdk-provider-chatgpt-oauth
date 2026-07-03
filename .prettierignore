@@ -1,0 +1,9 @@
+dist/
+coverage/
+node_modules/
+oauth-example/node_modules/
+package-lock.json
+oauth-example/package-lock.json
+oauth-example/oauth-tokens.json
+src/*.txt
+AGENTS.md

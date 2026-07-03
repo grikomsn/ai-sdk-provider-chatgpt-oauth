@@ -1,5 +1,5 @@
 import { generateText } from 'ai';
-import { createChatGPTOAuth } from '../dist/index.mjs';
+import { createChatGPTOAuth } from '../src/index';
 
 async function main() {
   try {
@@ -8,10 +8,8 @@ async function main() {
     });
 
     const result = await generateText({
-      model: provider('gpt-5'),
+      model: provider('gpt-5.5'),
       prompt: 'Write a haiku about TypeScript',
-      temperature: 0.7,
-      maxTokens: 100,
     });
 
     console.log('Generated text:', result.text);

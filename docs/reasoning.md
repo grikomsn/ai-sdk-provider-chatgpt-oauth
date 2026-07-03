@@ -1,89 +1,66 @@
-# Reasoning Effort Control
+# Reasoning
 
-Control the depth of reasoning for supported models (similar to Codex CLI's `-c model_reasoning_effort="high"`).
+Reasoning-capable models default to `medium` effort and an `auto` summary, matching
+the Codex CLI behavior used by this provider.
 
-## Quick Example
+## AI SDK 7 Call Option
+
+The standard AI SDK 7 `reasoning` option overrides the configured default:
 
 ```typescript
 import { generateText } from 'ai';
-import { createChatGPTOAuth } from 'ai-sdk-provider-chatgpt-oauth';
+import { createChatGPTOAuth } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
 
-// Default behavior (matches Codex CLI defaults)
-const provider = createChatGPTOAuth();
-// For gpt-5, gpt-5-codex, and codex models: automatically uses effort='medium', summary='auto'
+const chatgpt = createChatGPTOAuth();
 
-// Customize global reasoning settings
-const customProvider = createChatGPTOAuth({
-  reasoningEffort: 'high', // 'low' | 'medium' | 'high' | null (null disables)
-  reasoningSummary: 'detailed', // 'auto' | 'none' | 'concise' | 'detailed' | null
-});
-
-// Or per-model call
 const result = await generateText({
-  model: provider('gpt-5', {
-    reasoningEffort: 'high',
-    reasoningSummary: 'detailed',
-  }),
-  prompt: 'Prove that the square root of 2 is irrational',
+  model: chatgpt('gpt-5.5'),
+  reasoning: 'high',
+  prompt: 'Prove that the square root of two is irrational.',
 });
 
-// Explicitly disable reasoning (even for gpt-5 variants)
-const noReasoning = provider('gpt-5', { reasoningEffort: null });
+console.log(result.finalStep.reasoningText);
 ```
 
-## Reasoning Compatibility Table
+Accepted AI SDK values are `provider-default`, `none`, `minimal`, `low`,
+`medium`, `high`, and `xhigh`. Individual models can support only a subset. The
+backend returns an error for an unavailable effort.
 
-| Model                 | Reasoning Effort                     | Reasoning Summary                                       | Notes                                                      |
-| --------------------- | ------------------------------------ | ------------------------------------------------------- | ---------------------------------------------------------- |
-| **gpt-5**             | ✅ `low`<br>✅ `medium`<br>✅ `high` | ✅ `auto`<br>✅ `detailed`<br>⚠️ `none`<br>⚠️ `concise` | \*API behavior inconsistent - defaults to omitting summary |
-| **gpt-5-codex**       | ✅ `low`<br>✅ `medium`<br>✅ `high` | ✅ `auto`<br>✅ `detailed`<br>⚠️ `none`<br>⚠️ `concise` | \*API behavior inconsistent - defaults to omitting summary |
-| **codex-mini-latest** | ✅ `low`<br>✅ `medium`<br>✅ `high` | ✅ `auto`<br>✅ `detailed`<br>⚠️ `none`<br>⚠️ `concise` | \*API behavior inconsistent - defaults to omitting summary |
+## Provider Defaults
 
-## Defaults (matching Codex CLI)
-
-- When using `gpt-5`, `gpt-5-codex`, or `codex-mini-latest` models, reasoning defaults to `effort: 'medium'` and `summary: 'auto'`
-- To disable reasoning, explicitly set `reasoningEffort: null`
-- Other models do not receive reasoning parameters
-
-## Important Notes
-
-- Higher effort levels typically increase response time and token usage
-- ⚠️ The API shows inconsistent behavior with `none` and `concise` summary values - the provider will warn but still pass them through
-- All user-specified values are passed to the API as-is to ensure future compatibility
-- When reasoning is enabled, the request automatically includes `reasoning.encrypted_content`
-- API errors will clearly indicate if a value is not supported
-
-## Configuration Options
-
-### Global Configuration
-
-Set reasoning defaults for all models:
+Set a default for every model created by a provider:
 
 ```typescript
-const provider = createChatGPTOAuth({
+const chatgpt = createChatGPTOAuth({
   reasoningEffort: 'high',
   reasoningSummary: 'detailed',
 });
 ```
 
-### Per-Model Configuration
-
-Override settings for specific model calls:
+Or override it when selecting a model:
 
 ```typescript
-const model = provider('gpt-5', {
-  reasoningEffort: 'low',
+const model = chatgpt('gpt-5.5', {
+  reasoningEffort: 'xhigh',
   reasoningSummary: 'auto',
 });
 ```
 
-### Disabling Reasoning
-
-To disable reasoning entirely (even for models that support it):
+Set `reasoningEffort: null` to omit reasoning configuration:
 
 ```typescript
-const model = provider('gpt-5', { 
+const model = chatgpt('gpt-5.5', {
   reasoningEffort: null,
-  reasoningSummary: null 
+  reasoningSummary: null,
 });
 ```
+
+## Current Catalog
+
+During verification on July 3, 2026, `gpt-5.5`, `gpt-5.4`, and
+`gpt-5.4-mini` advertised `low`, `medium`, `high`, and `xhigh`. Catalog
+capabilities can vary by account and change over time.
+
+When reasoning is enabled, the provider requests encrypted reasoning content and
+maps summary text to AI SDK V4 reasoning parts. Usage maps cached input and
+reasoning output tokens into AI SDK 7's detailed usage fields.

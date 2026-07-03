@@ -1,182 +1,93 @@
-# Tool Calling Guide
+# Tool Calling
 
-The ChatGPT backend implements a Codex-style tool system with two predefined tools.
+The provider exposes two Codex backend tools through AI SDK 7:
 
-## Supported Tools
+- `shell` executes a command array.
+- `update_plan` updates a list of steps and statuses.
 
-1. **`shell`** - Execute command-line tools and scripts
-2. **`update_plan`** - Update task planning and progress tracking
+User tool names are mapped by convention:
 
-## Basic Usage
+| User tool name                                                 | Backend tool  |
+| -------------------------------------------------------------- | ------------- |
+| `bash`, `shell`, or a name containing `execute`/`command`      | `shell`       |
+| `TodoWrite`, `update_plan`, or a name containing `plan`/`todo` | `update_plan` |
 
-Unlike standard OpenAI models, ChatGPT uses a pattern where all custom functionality is implemented through command-line tools that are orchestrated via the `shell` tool:
+Other tools are omitted and reported as `unsupported` warnings.
+
+## Shell
 
 ```typescript
+import { spawn } from 'node:child_process';
 import { generateText, tool } from 'ai';
 import { z } from 'zod';
-import { createChatGPTOAuth } from 'ai-sdk-provider-chatgpt-oauth';
-
-const provider = createChatGPTOAuth();
 
 const result = await generateText({
-  model: provider('gpt-5'),
-  prompt: 'List the files in the current directory',
+  model: chatgpt('gpt-5.5'),
+  prompt: 'List TypeScript files.',
   tools: {
-    // Tool names that map to 'shell': bash, shell, command, execute
-    bash: tool({
-      description: 'Execute shell commands',
-      parameters: z.object({
+    shell: tool({
+      description: 'Run a sandboxed command',
+      inputSchema: z.object({
         command: z.array(z.string()),
         workdir: z.string().optional(),
         timeout: z.number().optional(),
       }),
-      execute: async ({ command, workdir, timeout }) => {
-        // Implement with proper sandboxing in production
-        const { spawnSync } = require('child_process');
-        const [cmd, ...args] = command;
-        const result = spawnSync(cmd, args, {
-          cwd: workdir,
-          timeout: (timeout || 30) * 1000,
-          encoding: 'utf8',
-        });
-        return result.stdout || result.stderr;
-      },
+      execute: async ({ command, workdir, timeout }) =>
+        runSandboxed(spawn, command, { workdir, timeout }),
     }),
   },
-  toolChoice: 'auto',
 });
 ```
 
-## Tool Name Mapping
+The schema must match the backend's command shape. Never pass these commands
+directly to a host shell in production. Enforce an executable allowlist, path
+restrictions, timeouts, output limits, and OS-level isolation.
 
-The provider automatically maps your tool names to ChatGPT's predefined tools:
-
-| Your Tool Name                             | Maps To       | Purpose           |
-| ------------------------------------------ | ------------- | ----------------- |
-| `bash`, `shell`, `command`, `execute`      | `shell`       | Command execution |
-| `TodoWrite`, `update_plan`, `plan`, `todo` | `update_plan` | Task planning     |
-| Other names                                | Not supported | Warning generated |
-
-## Custom Tool Pattern
-
-To implement custom functionality (like a weather API), create command-line tools:
-
-1. **Create a CLI tool**: `weather-cli` that fetches weather data
-2. **Call it via shell**: The AI calls `["weather-cli", "San Francisco"]`
-3. **Return results**: The CLI output becomes the tool result
-
-This mirrors how Codex CLI implements sophisticated tools like `apply_patch` for file editing.
-
-## Example: Weather CLI Tool
-
-### Step 1: Create the CLI Tool
-
-```javascript
-#!/usr/bin/env node
-// weather-cli.js
-const city = process.argv[2];
-const apiKey = process.env.WEATHER_API_KEY;
-
-async function getWeather(city) {
-  const response = await fetch(
-    `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}`
-  );
-  const data = await response.json();
-  console.log(JSON.stringify({
-    city: data.name,
-    temperature: data.main.temp,
-    description: data.weather[0].description,
-  }));
-}
-
-getWeather(city);
-```
-
-### Step 2: Make it Executable
-
-```bash
-chmod +x weather-cli.js
-```
-
-### Step 3: Use with ChatGPT OAuth
+## Planning
 
 ```typescript
 const result = await generateText({
-  model: provider('gpt-5'),
-  prompt: 'What is the weather in San Francisco?',
+  model: chatgpt('gpt-5.5'),
+  prompt: 'Plan a small migration.',
   tools: {
-    bash: tool({
-      description: 'Execute shell commands',
-      parameters: z.object({
-        command: z.array(z.string()),
+    update_plan: tool({
+      description: 'Update the task plan',
+      inputSchema: z.object({
+        explanation: z.string().optional(),
+        plan: z.array(
+          z.object({
+            step: z.string(),
+            status: z.enum(['pending', 'in_progress', 'completed']),
+          })
+        ),
       }),
-      execute: async ({ command }) => {
-        // The model will call: ["./weather-cli.js", "San Francisco"]
-        const { spawnSync } = require('child_process');
-        const [cmd, ...args] = command;
-        const result = spawnSync(cmd, args, {
-          encoding: 'utf8',
-        });
-        return result.stdout;
+      execute: async ({ explanation, plan }) => {
+        await savePlan({ explanation, plan });
+        return 'Plan saved';
       },
     }),
   },
 });
 ```
 
-## Task Planning Tool
+## Multi-Step Calls
 
-The `update_plan` tool is used for maintaining task lists:
+AI SDK executes mapped tools on the client. Configure an AI SDK stop condition
+when more than one model step is required:
 
 ```typescript
+import { generateText, isStepCount } from 'ai';
+
 const result = await generateText({
-  model: provider('gpt-5'),
-  prompt: 'Create a plan to build a web application',
-  tools: {
-    TodoWrite: tool({
-      description: 'Update task plan',
-      parameters: z.object({
-        todos: z.array(z.object({
-          content: z.string(),
-          status: z.enum(['pending', 'in_progress', 'completed']),
-          id: z.string(),
-        })),
-      }),
-      execute: async ({ todos }) => {
-        // Store/update the task list
-        console.log('Updated task plan:', todos);
-        return 'Task plan updated successfully';
-      },
-    }),
-  },
+  model: chatgpt('gpt-5.5'),
+  prompt: 'Inspect the project and summarize it.',
+  tools,
+  stopWhen: isStepCount(5),
 });
 ```
 
-## Limitations
+The provider marks tool-call responses with the V4 `tool-calls` finish reason so
+AI SDK can continue the loop. Conversation history is sent on each backend call;
+the backend itself does not retain state.
 
-- **No arbitrary function tools**: Can't define custom function tools like `getWeather`
-- **Shell-based only**: All custom logic must be executable via command line
-- **Two tools only**: Limited to `shell` and `update_plan` functionality
-- **Stateless backend**: The model doesn't remember tool calls between requests
-
-## Best Practices
-
-1. **Sandbox Shell Commands**: Always sanitize and sandbox shell execution in production
-2. **Use Proper Error Handling**: Handle command failures gracefully
-3. **Implement Timeouts**: Prevent long-running commands from hanging
-4. **Log Tool Calls**: Track what commands are being executed
-5. **Validate Output**: Ensure tool outputs are in expected format
-
-## Codex Pattern Examples
-
-In the Codex CLI ecosystem:
-
-- **`apply_patch`**: A CLI tool for file editing, called via `shell`
-- **`grep`/`find`**: System tools for searching, called via `shell`
-- **Custom CLIs**: Your own tools, executed through `shell`
-
-## See Also
-
-- [Tool Calling Examples](../examples/tool-calling-basic.ts)
-- [Stateless Backend Demo](../examples/tool-calling-stateless.ts)
-- [Tool Limitations Demo](../examples/tool-calling-limitations.ts)
+See the [tool examples](../examples/) and [limitations](./limitations.md).

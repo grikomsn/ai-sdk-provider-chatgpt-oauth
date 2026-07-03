@@ -1,34 +1,31 @@
 import { generateText } from 'ai';
-import { createChatGPTOAuth } from '../dist/index.mjs';
+import { ChatGPTOAuthError, createChatGPTOAuth, type ChatGPTOAuthProvider } from '../src/index';
 
 /**
  * This example demonstrates which models work with the ChatGPT OAuth API
  * and what happens when you try to use an unsupported model.
  */
 
-async function testModel(provider: any, modelId: string, description: string) {
+async function testModel(provider: ChatGPTOAuthProvider, modelId: string, description: string) {
   console.log(`\n${modelId} - ${description}`);
   console.log('─'.repeat(50));
-  
+
   try {
     const result = await generateText({
       model: provider(modelId),
       prompt: 'Respond with a single sentence about your capabilities.',
-      maxToolRoundtrips: 0, // No tools for this demo
     });
-    
+
     console.log('✅ SUCCESS');
     console.log(`Response: ${result.text}`);
     console.log(`Tokens used: ${result.usage.totalTokens}`);
     console.log(`Finish reason: ${result.finishReason}`);
-  } catch (error: any) {
+  } catch (error) {
     console.log('❌ ERROR');
-    console.log(`Error message: ${error.message}`);
-    
-    // Show the specific error for unsupported models
-    if (error.message.includes('Unsupported model')) {
-      console.log('This model is not supported by the ChatGPT OAuth API.');
-      console.log('The model may be available in Codex CLI but not via OAuth.');
+    console.log(`Error message: ${error instanceof Error ? error.message : String(error)}`);
+
+    if (error instanceof ChatGPTOAuthError && error.code === 'MODEL_NOT_AVAILABLE') {
+      console.log('This model is not in the authenticated workspace catalog.');
     }
   }
 }
@@ -38,55 +35,29 @@ async function main() {
     autoRefresh: true,
   });
 
-  console.log('=' .repeat(60));
+  console.log('='.repeat(60));
   console.log('ChatGPT OAuth Model Support Demonstration');
-  console.log('=' .repeat(60));
+  console.log('='.repeat(60));
   console.log('\nThis example shows which models work with the ChatGPT OAuth API');
   console.log('and demonstrates the error when using unsupported models.\n');
 
   // Test working models
   console.log('\n🟢 WORKING MODELS:');
-  await testModel(
-    provider,
-    'gpt-5',
-    'Latest GPT-5 with reasoning (200k context)'
-  );
+  await testModel(provider, 'gpt-5.5', 'Current GPT-5 model (372k context)');
 
-  await testModel(
-    provider,
-    'gpt-5-codex',
-    'Codex CLI tuned GPT-5 variant with identical limits'
-  );
+  await testModel(provider, 'gpt-5.4', 'GPT-5 model (272k context)');
 
-  await testModel(
-    provider,
-    'codex-mini-latest',
-    'Experimental model with local shell understanding'
-  );
+  await testModel(provider, 'gpt-5.4-mini', 'Smaller GPT-5 model (272k context)');
 
   // Test an unsupported model to show the error
   console.log('\n\n🔴 UNSUPPORTED MODEL EXAMPLE:');
-  await testModel(
-    provider,
-    'o3',
-    'Advanced reasoning model (requires API key access, not OAuth)'
-  );
+  await testModel(provider, 'o3', 'Advanced reasoning model (requires API key access, not OAuth)');
 
-  // Additional examples of unsupported models
-  console.log('\n\n📋 OTHER UNSUPPORTED MODELS:');
-  console.log('The following models also return "Unsupported model" errors:');
-  console.log('  • o4-mini - Efficient reasoning model');
-  console.log('  • gpt-4.1 - 1M+ context window model');
-  console.log('  • gpt-4o - GPT-4o and all its variants');
-  console.log('  • gpt-3.5-turbo - Legacy model');
-  console.log('  • gpt-oss-20b, gpt-oss-120b - Open source models');
-  
-  console.log('\n' + '=' .repeat(60));
+  console.log('\n' + '='.repeat(60));
   console.log('Summary:');
-  console.log('  • Only gpt-5, gpt-5-codex, and codex-mini-latest work via OAuth API');
-  console.log('  • Other models currently require API key integrations rather than OAuth');
-  console.log('  • The provider will pass through any model ID for future support');
-  console.log('=' .repeat(60));
+  console.log('  • Availability comes from the authenticated workspace catalog');
+  console.log('  • The catalog can change independently of this package');
+  console.log('='.repeat(60));
 }
 
 main().catch(console.error);

@@ -1,21 +1,36 @@
-import type { LanguageModelV2FinishReason } from '@ai-sdk/provider';
+import type { LanguageModelV4FinishReason } from '@ai-sdk/provider';
 
 export function mapChatGPTFinishReason(
   finishReason: string | null | undefined
-): LanguageModelV2FinishReason {
+): LanguageModelV4FinishReason {
+  let unified: LanguageModelV4FinishReason['unified'];
+
   switch (finishReason) {
     case 'stop':
     case 'completed': // ChatGPT backend uses 'completed' status
-      return 'stop';
+      unified = 'stop';
+      break;
     case 'length':
     case 'max_tokens':
-      return 'length';
+      unified = 'length';
+      break;
     case 'tool_calls':
     case 'function_call':
-      return 'tool-calls';
+      unified = 'tool-calls';
+      break;
     case 'content_filter':
-      return 'content-filter';
+      unified = 'content-filter';
+      break;
+    case 'failed':
+    case 'error':
+      unified = 'error';
+      break;
     default:
-      return 'stop'; // Default to 'stop' instead of 'unknown' for ChatGPT backend
+      unified = 'other';
   }
+
+  return {
+    unified,
+    raw: finishReason ?? undefined,
+  };
 }

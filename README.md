@@ -1,118 +1,72 @@
-# AI SDK Provider for ChatGPT OAuth (gpt-5)
+# ChatGPT OAuth Provider for AI SDK 7
 
-A [Vercel AI SDK](https://sdk.vercel.ai) v5 provider for accessing GPT-5 models through ChatGPT OAuth authentication. This provider enables you to use ChatGPT Plus, Pro, or Teams subscriptions with the AI SDK.
+An ESM-only [Vercel AI SDK](https://ai-sdk.dev/) v7 provider for using models
+available to a ChatGPT account through Codex OAuth.
+
+> This community provider uses ChatGPT's Codex backend rather than the public
+> OpenAI API. The endpoint and available models can change without notice.
+> Review [the limitations](./docs/limitations.md) before using it in production.
 
 ## Features
 
-- 🚀 **GPT-5 Access** - Use the latest gpt-5 models via ChatGPT OAuth
-- 🔐 **OAuth Support** - Automatic token management and refresh
-- 🔄 **Full Streaming** - Real-time streaming responses with SSE
-- 🛠️ **Codex-Style Tools** - Shell command and task planning tools
-- 📦 **AI SDK v5 Compatible** - Works seamlessly with Vercel AI SDK v5
-- 🔥 **TypeScript Ready** - Full TypeScript support with type definitions
-- 📊 **Usage Tracking** - Accurate token usage and telemetry
-- 📝 **JSON Generation** - Generate structured JSON through prompt engineering (see [examples](./examples/))
+- Native AI SDK 7 `ProviderV4` and `LanguageModelV4` implementation
+- Text generation, reasoning summaries, streaming, usage, and tool-call events
+- PKCE OAuth, automatic token refresh, environment variables, or Codex CLI credentials
+- Live model catalog lookup, including the exact instructions required by each model
+- Zod 3.25.76+ and Zod 4.1.8+ compatibility
+- Node.js 22+, ESM-only package
 
-> ⚠️ **Important**: This provider has significant differences from standard OpenAI API. See [limitations](./docs/limitations.md) for details.
-
-📚 **Documentation**:
-
-- [Examples](./examples/README.md) - Working code examples
-- [Limitations](./docs/limitations.md) - API constraints and workarounds
-- [Authentication](./docs/authentication.md) - All authentication options
-- [Tool Calling](./docs/tool-calling.md) - How to use tools
-- [Reasoning](./docs/reasoning.md) - Control reasoning depth
-- [JSON Formatting](./docs/json-formatting.md) - Generate structured output
-- [Tool System](./docs/tool-system.md) - Understanding the architecture
-
-## Installation
+## Install
 
 ```bash
-npm install ai-sdk-provider-chatgpt-oauth
-# or
-yarn add ai-sdk-provider-chatgpt-oauth
-# or
-pnpm add ai-sdk-provider-chatgpt-oauth
+npm install ai@7 @grikomsn/ai-sdk-provider-chatgpt-oauth
 ```
 
-## Prerequisites
+## Authenticate
 
-### Option 1: Use Codex CLI (Recommended for Quick Start)
-
-Install and authenticate with OpenAI's Codex CLI:
+The quickest option is to sign in with the Codex CLI:
 
 ```bash
-npm install -g @openai/codex
+npm install --global @openai/codex
 codex login
 ```
 
-This will create OAuth credentials at `~/.codex/auth.json` that the provider can use automatically.
+The provider reads `~/.codex/auth.json` by default. It also supports:
 
-### Option 2: Implement Your Own OAuth Flow
+- A standalone [PKCE OAuth example](./oauth-example/)
+- `CHATGPT_OAUTH_ACCESS_TOKEN`, `CHATGPT_OAUTH_ACCOUNT_ID`, and optional
+  `CHATGPT_OAUTH_REFRESH_TOKEN` environment variables
+- Direct `credentials`
+- A custom `AuthProvider`
 
-See the [complete OAuth implementation example](./oauth-example/) that demonstrates how to implement the full OAuth flow without Codex CLI, including PKCE, token refresh, and a working CLI.
+Never commit OAuth tokens or Codex authentication files.
 
-### Option 3: Environment Variables
-
-Set the following environment variables:
-
-```bash
-export CHATGPT_OAUTH_ACCESS_TOKEN="your-access-token"
-export CHATGPT_OAUTH_ACCOUNT_ID="your-account-id"
-export CHATGPT_OAUTH_REFRESH_TOKEN="your-refresh-token" # Optional, for auto-refresh
-```
-
-### Option 4: Direct Credentials
-
-Pass credentials directly to the provider (see usage examples below).
-
-## Quick Start
+## Generate Text
 
 ```typescript
 import { generateText } from 'ai';
-import { createChatGPTOAuth } from 'ai-sdk-provider-chatgpt-oauth';
+import { createChatGPTOAuth } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
 
-const provider = createChatGPTOAuth();
+const chatgpt = createChatGPTOAuth();
 
 const result = await generateText({
-  model: provider('gpt-5'),
-  prompt: 'Write a haiku about TypeScript',
+  model: chatgpt('gpt-5.5'),
+  prompt: 'Write a haiku about TypeScript.',
 });
 
 console.log(result.text);
+console.log(result.usage);
 ```
 
-## Usage Examples
-
-### Basic Text Generation
-
-```typescript
-import { generateText } from 'ai';
-import { createChatGPTOAuth } from 'ai-sdk-provider-chatgpt-oauth';
-
-const provider = createChatGPTOAuth({
-  autoRefresh: true, // Enable automatic token refresh
-});
-
-const result = await generateText({
-  model: provider('gpt-5'),
-  prompt: 'Explain quantum computing',
-  temperature: 0.7,
-  maxTokens: 500,
-});
-```
-
-### Streaming Responses
+## Stream Text
 
 ```typescript
 import { streamText } from 'ai';
-import { createChatGPTOAuth } from 'ai-sdk-provider-chatgpt-oauth';
+import { createChatGPTOAuth } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
 
-const provider = createChatGPTOAuth();
-
-const result = await streamText({
-  model: provider('gpt-5'),
-  prompt: 'Write a story about a robot',
+const result = streamText({
+  model: createChatGPTOAuth()('gpt-5.5'),
+  prompt: 'Explain OAuth PKCE in three short paragraphs.',
 });
 
 for await (const chunk of result.textStream) {
@@ -120,176 +74,168 @@ for await (const chunk of result.textStream) {
 }
 ```
 
-### Reasoning Effort Control
+## Provider Registry
 
-Control the depth of reasoning for gpt-5 models:
+The provider implements the complete AI SDK 7 `ProviderV4` registry contract:
 
 ```typescript
-const provider = createChatGPTOAuth({
-  reasoningEffort: 'high', // 'low' | 'medium' | 'high'
+import { createProviderRegistry } from 'ai';
+import { createChatGPTOAuth } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
+
+const registry = createProviderRegistry({
+  chatgpt: createChatGPTOAuth(),
 });
 
-// Or per-model call
+const model = registry.languageModel('chatgpt:gpt-5.5');
+```
+
+Only language models are available. Registry requests for embedding or image
+models throw AI SDK's `NoSuchModelError`.
+
+## Reasoning
+
+Use AI SDK 7's call-level `reasoning` option:
+
+```typescript
 const result = await generateText({
-  model: provider('gpt-5', { reasoningEffort: 'high' }),
-  prompt: 'Solve this complex problem...',
+  model: chatgpt('gpt-5.5'),
+  reasoning: 'high',
+  prompt: 'Analyze this concurrency bug.',
 });
 ```
 
-See [Reasoning Documentation](./docs/reasoning.md) for detailed configuration and compatibility.
+Provider defaults can also be configured per provider or model:
 
-### Tool Calling
+```typescript
+const chatgpt = createChatGPTOAuth({
+  reasoningEffort: 'medium',
+  reasoningSummary: 'auto',
+});
 
-ChatGPT OAuth supports only two predefined tools:
+const model = chatgpt('gpt-5.5', {
+  reasoningEffort: 'xhigh',
+});
+```
 
-1. **`shell`** - Execute command-line tools (maps from: `bash`, `shell`, `command`, `execute`)
-2. **`update_plan`** - Task planning (maps from: `TodoWrite`, `update_plan`, `plan`, `todo`)
+See [reasoning options](./docs/reasoning.md).
+
+## Tools
+
+This provider currently maps command tools to the Codex `shell` tool and planning
+tools to `update_plan`. Other custom function tools are returned as unsupported
+warnings.
 
 ```typescript
 import { generateText, tool } from 'ai';
 import { z } from 'zod';
 
 const result = await generateText({
-  model: provider('gpt-5'),
-  prompt: 'List files in current directory',
+  model: chatgpt('gpt-5.5'),
+  prompt: 'List TypeScript files in the current directory.',
   tools: {
-    bash: tool({
-      description: 'Execute shell commands',
-      parameters: z.object({ command: z.array(z.string()) }),
-      execute: async ({ command }) => {
-        // Execute command (implement with proper sandboxing)
-        return executeCommand(command);
-      },
+    shell: tool({
+      description: 'Run a command',
+      inputSchema: z.object({
+        command: z.array(z.string()),
+      }),
+      execute: async ({ command }) => runSandboxed(command),
     }),
   },
 });
 ```
 
-**Note**: Custom functionality must be implemented as CLI tools. See [Tool Calling Guide](./docs/tool-calling.md) for details.
+Only execute model-provided commands inside an appropriate sandbox. See
+[tool calling](./docs/tool-calling.md).
 
-## Configuration Options
+## Models
 
-### `createChatGPTOAuth(options?)`
+The provider fetches `/codex/models` for the authenticated account and caches the
+selected model's required instructions. It therefore follows account entitlements
+instead of maintaining a permanently hard-coded allowlist.
 
-| Option            | Type                      | Description                                                            |
-| ----------------- | ------------------------- | ---------------------------------------------------------------------- |
-| `baseURL`         | `string`                  | Override the API base URL (default: `https://chatgpt.com/backend-api`) |
-| `headers`         | `Record<string, string>`  | Additional headers to send with requests                               |
-| `fetch`           | `FetchFunction`           | Custom fetch implementation                                            |
-| `credentials`     | `ChatGPTOAuthCredentials` | Direct credentials object                                              |
-| `credentialsPath` | `string`                  | Path to credentials file (default: `~/.codex/auth.json`)               |
-| `authProvider`    | `AuthProvider`            | Custom authentication provider                                         |
-| `autoRefresh`     | `boolean`                 | Enable automatic token refresh (default: `true`)                       |
+Verified on July 3, 2026:
 
-## Supported Models
+| Model          | Context window | Live verification             |
+| -------------- | -------------: | ----------------------------- |
+| `gpt-5.5`      |        372,000 | Text generation and streaming |
+| `gpt-5.4`      |        272,000 | Text generation               |
+| `gpt-5.4-mini` |        272,000 | Catalog availability          |
 
-### Actually Working Models (Tested)
+Other IDs are accepted by the TypeScript API, but calls fail with
+`MODEL_NOT_AVAILABLE` when the account catalog does not contain them.
 
-- `gpt-5` - Latest GPT-5 model with reasoning support (200k context, 100k output)
-- `gpt-5-codex` - Codex CLI tuned GPT-5 variant with identical limits and reasoning defaults
-- `codex-mini-latest` - Experimental model with local shell understanding (200k context, 100k output)
+## Configuration
 
-### Model Limitations
+| Option             | Type                       | Description                                                 |
+| ------------------ | -------------------------- | ----------------------------------------------------------- |
+| `baseURL`          | `string`                   | API base URL; defaults to `https://chatgpt.com/backend-api` |
+| `headers`          | `Record<string, string>`   | Additional request headers                                  |
+| `fetch`            | `FetchFunction`            | Custom fetch implementation                                 |
+| `credentials`      | `ChatGPTOAuthCredentials`  | Direct OAuth credentials                                    |
+| `credentialsPath`  | `string`                   | Codex auth path; defaults to `~/.codex/auth.json`           |
+| `authProvider`     | `AuthProvider`             | Custom credential source                                    |
+| `autoRefresh`      | `boolean`                  | Refresh expiring credentials; defaults to `true`            |
+| `reasoningEffort`  | `ReasoningEffort \| null`  | Default reasoning effort                                    |
+| `reasoningSummary` | `ReasoningSummary \| null` | Default reasoning summary                                   |
+| `instructions`     | `string`                   | Override catalog instructions for custom backends           |
 
-The ChatGPT OAuth API at `https://chatgpt.com/backend-api/codex/responses` currently supports only these three models. While Codex CLI internally supports additional models (o3, o4-mini, gpt-4.1, gpt-4o, etc.), they return "Unsupported model" errors when accessed through the OAuth API.
+## Unsupported Settings
 
-Any other model ID string will be passed through to the API, allowing for future model support without code changes.
+The Codex backend currently ignores or rejects several standard language-model
+settings. The provider emits AI SDK warnings for `temperature`, `topP`, and
+`maxOutputTokens`. Structured output APIs are not supported; use text generation,
+parse the result, and validate it in application code.
 
-### JSON Generation
+See [limitations](./docs/limitations.md) and
+[JSON formatting](./docs/json-formatting.md).
 
-**Note**: `generateObject()` and `streamObject()` are not supported. Use prompt engineering:
+## Errors
 
 ```typescript
-const result = await generateText({
-  model: provider('gpt-5'),
-  prompt: 'Generate user profile.\nOUTPUT ONLY JSON: {"name": "string", "age": number}',
-});
-
-const data = JSON.parse(result.text);
-```
-
-See [JSON examples](./examples/) and [JSON documentation](./docs/json-formatting.md) for patterns.
-
-## Error Handling
-
-```typescript
-import { ChatGPTOAuthError } from 'ai-sdk-provider-chatgpt-oauth';
+import { ChatGPTOAuthError } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
 
 try {
-  const result = await generateText({
-    model: provider('gpt-5'),
+  await generateText({
+    model: chatgpt('gpt-5.5'),
     prompt: 'Hello',
   });
 } catch (error) {
   if (error instanceof ChatGPTOAuthError) {
-    console.error('ChatGPT OAuth error:', error.message);
-    console.error('Status code:', error.statusCode);
+    console.error(error.code, error.statusCode, error.message);
   }
 }
 ```
 
 ## Development
 
-### Building
-
 ```bash
-npm run build
+npm install
+npm run check
 ```
 
-### Testing
+`npm run check` verifies formatting, lint, library and example typechecking,
+unit/integration tests, and the package build. Live OAuth verification is in
+`oauth-example`:
 
 ```bash
+cd oauth-example
+npm install
+CHATGPT_OAUTH_BROWSER=Safari npm run login
 npm test
 ```
 
-### Examples
+Changesets manages versions and changelog entries. Add a changeset with
+`npm run changeset` in every pull request that changes the published package.
+Merging the automated release pull request publishes through npm trusted
+publishing; the workflow stores no npm token.
 
-```bash
-# Check authentication
-npm run example:auth
+## Ownership
 
-# Basic usage
-npm run example:basic
-
-# Streaming
-npm run example:streaming
-
-# Tool calling
-npm run example:tools
-```
-
-## Troubleshooting
-
-### No credentials found
-
-Ensure you have either:
-
-- Authenticated with Codex CLI: `codex login`
-- Set environment variables
-- Passed credentials directly
-
-### Token expired
-
-Enable `autoRefresh` or provide a refresh token:
-
-```typescript
-const provider = createChatGPTOAuth({
-  autoRefresh: true,
-});
-```
-
-### Rate limiting
-
-The provider includes automatic retry logic for rate limits. You can also implement custom retry logic in your application.
+This maintained fork uses the `@grikomsn` package scope and lives at
+[grikomsn/ai-sdk-provider-chatgpt-oauth](https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth).
+The original work by Ben Vargas remains credited in the package metadata and
+license.
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Support
-
-For issues and questions, please use the [GitHub Issues](https://github.com/ben-vargas/ai-sdk-provider-chatgpt-oauth/issues) page.

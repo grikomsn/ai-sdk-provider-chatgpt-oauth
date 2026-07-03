@@ -1,232 +1,110 @@
-# ChatGPT OAuth Provider Limitations
+# Limitations
 
-This document outlines the limitations and constraints of the ChatGPT OAuth provider compared to standard OpenAI API providers.
-
-## Tool System Limitations
-
-### Only Two Predefined Tools
-
-The ChatGPT backend **only** supports these tools:
-
-1. **`shell`** - Execute command-line commands
-   - Mapped from: `bash`, `shell`, `command`, `execute`
-   - Purpose: Run CLI tools and scripts
-
-2. **`update_plan`** - Task planning and tracking
-   - Mapped from: `TodoWrite`, `update_plan`, `plan`, `todo`
-   - Purpose: Maintain task lists and progress
-
-### No Custom Function Tools
-
-❌ **Cannot Define Custom Tools** like:
-- `getWeather` - Weather API calls
-- `searchDatabase` - Database queries
-- `sendEmail` - Email operations
-- `calculatePrice` - Custom calculations
-
-✅ **Workaround**: Implement as CLI tools called via shell:
-```typescript
-// Instead of a custom tool, create a CLI
-// weather-cli that the AI calls via shell
-["weather-cli", "--city", "San Francisco"]
-```
-
-## Structured Output Limitations
-
-### ❌ JSON Generation Does NOT Work with AI SDK Features
-
-**Critical Limitation**: The ChatGPT OAuth backend does NOT support custom tools, which means **`generateObject()` and `streamObject()` do NOT work**.
-
-**What Does NOT Work:**
-- ❌ **`generateObject()` function** - Requires custom tools, backend only supports shell/update_plan
-- ❌ **`streamObject()` function** - Same limitation as generateObject
-- ❌ **Custom tool schemas** - Only predefined Codex tools are allowed
-- ❌ **Response format parameters** - Backend ignores these entirely
-- ❌ **Modified instructions** - Backend validates and rejects any changes
-
-### Why It Doesn't Work
-
-1. **No Custom Tools**: The backend only accepts `shell` and `update_plan` tools
-2. **Fixed Instructions**: Codex CLI instructions cannot be modified (causes "Instructions are not valid" error)
-3. **AI SDK Incompatibility**: generateObject creates custom tools that the backend rejects
-4. **No Response Format Control**: The backend has no structured output mode
-
-### The ONLY Working Approach: Prompt Engineering
-
-```typescript
-// This is the ONLY way to get JSON from ChatGPT OAuth
-const result = await generateText({
-  model: chatgptOAuth('gpt-5'),
-  prompt: `Generate a user profile as JSON.
-  
-IMPORTANT: Respond ONLY with valid JSON. No text before or after.
-{
-  "name": "string",
-  "age": number,
-  "email": "string"
-}`,
-});
-
-// Parse manually with error handling
-try {
-  const data = JSON.parse(result.text);
-  console.log('Parsed:', data);
-} catch (e) {
-  console.error('Not valid JSON');
-}
-```
-
-### Best Practices for JSON Output
-
-1. **Use explicit prompt instructions** for JSON formatting
-2. **Provide examples** in the prompt
-3. **Parse manually** with error handling
-4. **Consider retry logic** if parsing fails
-5. **Accept that it's not 100% reliable** - the model may still output text
-
-## Parameter Limitations
-
-These standard parameters are **not supported**:
-
-| Parameter | Impact | Workaround |
-|-----------|--------|------------|
-| `temperature` | Cannot control randomness | Use prompt engineering |
-| `topP` | Cannot adjust sampling | Model uses defaults |
-| `maxTokens` | Cannot limit output length | Model manages internally |
-| `frequencyPenalty` | Cannot reduce repetition | Prompt design only |
-| `presencePenalty` | Cannot encourage novelty | Prompt engineering |
-| `seed` | No deterministic outputs | Not available |
-| `stop` | Cannot define stop sequences | Model controlled |
-
-## API Differences
-
-### Endpoint Behavior
-
-- **Always Streams**: Even non-streaming calls use SSE internally
-- **Responses API**: Uses `/codex/responses` not `/chat/completions`
-- **Event Format**: Custom SSE events, not standard OpenAI format
-
-### Authentication
-
-- **OAuth Only**: No API key support
-- **Token Refresh**: Requires refresh token management
-- **Account ID**: Needs ChatGPT account identifier
+This provider targets ChatGPT's Codex backend, not the public OpenAI API. The
+backend is undocumented and may change independently of this package.
 
 ## Model Availability
 
-### Actually Working Models (Tested via API)
+Model access is account-specific. The provider loads the authenticated account's
+`/codex/models` catalog and uses the exact instructions returned for the selected
+model.
 
-Only **3 models** work through the ChatGPT OAuth API:
+The following models were visible during verification on July 3, 2026:
 
-1. **`gpt-5`** - Latest GPT-5 with reasoning support (200k context, 100k output)
-2. **`gpt-5-codex`** - Codex-tuned GPT-5 variant with identical limits and defaults
-3. **`codex-mini-latest`** - Experimental with local shell understanding (200k context, 100k output)
+| Model          | Context window | Visibility |
+| -------------- | -------------: | ---------- |
+| `gpt-5.5`      |        372,000 | Listed     |
+| `gpt-5.4`      |        272,000 | Listed     |
+| `gpt-5.4-mini` |        272,000 | Listed     |
 
-### Models That DO NOT Work
+This is a dated verification snapshot, not a permanent allowlist. A model may be
+added, removed, hidden, or unavailable on a different ChatGPT workspace.
 
-Testing confirmed these models return "Unsupported model" errors:
-- ❌ `o3`, `o4-mini` - Reasoning models
-- ❌ `gpt-4.1`, `gpt-4.1-2025-04-14` - 1M context models
-- ❌ `gpt-4o` and all variants - GPT-4o series
-- ❌ `gpt-3.5-turbo` - Legacy model
-- ❌ `gpt-oss-20b`, `gpt-oss-120b` - Open source models
-- ❌ `gpt-5-turbo-preview` - Not available
+## Provider Settings
 
-### Important Distinction
+The Codex backend controls sampling and output limits. The provider reports
+unsupported-setting warnings when callers supply:
 
-**Codex CLI** internally supports many models, but the **ChatGPT OAuth API** (`/backend-api/codex/responses`) currently only accepts `gpt-5`, `gpt-5-codex`, and `codex-mini-latest`. This is a limitation of the OAuth API endpoint, not the provider.
+- `temperature`
+- `topP`
+- `topK`
+- `maxOutputTokens`
+- `frequencyPenalty`
+- `presencePenalty`
+- `seed`
+- `stopSequences`
+- `responseFormat`
 
-## Use Case Limitations
+Use prompt design when the backend does not expose a corresponding control.
 
-### Not Suitable For
+## Provider Modalities
 
-❌ Applications requiring:
-- Structured data extraction
-- JSON API responses
-- Custom business logic tools
-- Precise output formatting
-- Deterministic responses
-- Fine-grained control
+The package implements AI SDK 7's complete `ProviderV4` registry interface, but
+the ChatGPT Codex backend integration exposes language models only. Calls to
+`embeddingModel` or `imageModel` throw AI SDK's `NoSuchModelError`.
 
-### Best Suited For
+## Structured Output
 
-✅ Applications involving:
-- Code generation and editing
-- CLI automation
-- File system operations
-- Task planning and execution
-- Development workflows
-- Codex CLI integration
+AI SDK structured output relies on response formats that this backend does not
+currently accept. `generateObject`, `streamObject`, and `Output.object` are
+therefore unsupported.
 
-## Comparison with Standard OpenAI
+Generate text, parse it, and validate the result instead:
 
-| Feature | Standard OpenAI | ChatGPT OAuth |
-|---------|----------------|---------------|
-| Custom Tools | ✅ Unlimited | ❌ Only 2 predefined |
-| JSON Mode | ✅ Supported | ❌ Not available |
-| Temperature | ✅ Configurable | ❌ Fixed |
-| API Keys | ✅ Simple | ❌ OAuth required |
-| Models | ✅ Many options | ❌ Only gpt-5 / gpt-5-codex / codex-mini-latest |
-| Structured Output | ✅ Full support | ❌ Not supported |
-| Response Format | ✅ Controllable | ❌ Fixed |
+```typescript
+import { generateText } from 'ai';
+import { z } from 'zod';
 
-## Migration Considerations
+const schema = z.object({
+  name: z.string(),
+  age: z.number(),
+});
 
-If migrating from standard OpenAI:
+const result = await generateText({
+  model: chatgpt('gpt-5.5'),
+  prompt: 'Return only JSON matching {"name":"string","age":number}.',
+});
 
-1. **Rewrite Custom Tools**: Convert to CLI utilities
-2. **Remove Structured Output**: Use text parsing instead
-3. **Adjust Prompts**: Work within Codex instructions
-4. **Handle OAuth**: Implement token management
-5. **Accept Limitations**: Design around constraints
+const value = schema.parse(JSON.parse(result.text));
+```
 
-## Workarounds and Best Practices
+Prompted JSON is probabilistic. Production code should handle parse failures and
+validation errors.
 
-### Implementing Custom Logic
+## Tools
 
-1. **Create CLI Tools**
-   ```bash
-   #!/usr/bin/env node
-   // weather-cli.js
-   const city = process.argv[2];
-   // Fetch weather and output to stdout
-   console.log(JSON.stringify(weatherData));
-   ```
+The provider maps only two Codex-style tool categories:
 
-2. **Call via Shell**
-   ```typescript
-   tools: {
-     bash: tool({
-       execute: async ({ command }) => {
-         // Execute your CLI tool
-         return runCommand(command);
-       }
-     })
-   }
-   ```
+- Command-like names (`bash`, `shell`, names containing `execute` or `command`)
+  map to `shell`.
+- Planning-like names (`TodoWrite`, `update_plan`, names containing `plan` or
+  `todo`) map to `update_plan`.
 
-### Handling Structured Data
+Other function tools are omitted and returned as AI SDK `unsupported` warnings.
+Provider-defined tools and specific named `toolChoice` values are unsupported.
 
-Without JSON mode, use:
-- Clear prompt instructions for formatting
-- Text parsing on responses
-- Validation and retry logic
-- Accept some variability in output format
+Treat every command generated by a model as untrusted input. Use a sandbox,
+restrict available programs and paths, and enforce resource limits.
 
-### Working with Limitations
+## Prompt Instructions
 
-1. **Embrace the Codex Pattern**: Design around CLI tools
-2. **Use Shell Power**: Leverage existing CLI ecosystem
-3. **Task Planning**: Utilize `update_plan` for complex workflows
-4. **Prompt Engineering**: Compensate for missing parameters
+The backend validates a model-specific instruction block. By default, the
+provider retrieves it from the live model catalog. AI SDK top-level
+`instructions` are carried as conversation input instead of replacing that
+backend instruction block.
 
-## Conclusion
+The provider's `instructions` override exists for testing and custom compatible
+backends. Supplying arbitrary instructions to ChatGPT's Codex endpoint can cause
+the request to be rejected.
 
-The ChatGPT OAuth provider is powerful for coding and CLI tasks but has significant limitations for general AI applications. Choose this provider when you need:
+## API Behavior
 
-- Access to gpt-5 models
-- Integration with Codex CLI
-- Shell command execution
-- Task planning capabilities
+- Calls use `POST /codex/responses`.
+- The backend streams SSE even when AI SDK calls `generateText`.
+- Conversation state is not retained between requests; send the required history
+  on every call.
+- OAuth access and refresh tokens are sensitive credentials.
+- ChatGPT plan limits and workspace policy apply.
 
-For applications requiring custom tools, structured output, or fine-grained control, consider using the standard OpenAI API provider instead.
+For general OpenAI API access, custom function tools, structured outputs, or
+stable public API guarantees, use the official AI SDK OpenAI provider instead.

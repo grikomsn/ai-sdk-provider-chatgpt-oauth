@@ -1,5 +1,5 @@
 import { streamText } from 'ai';
-import { createChatGPTOAuth } from '../dist/index.mjs';
+import { createChatGPTOAuth } from '../src/index';
 
 async function main() {
   try {
@@ -8,21 +8,19 @@ async function main() {
     });
 
     const result = await streamText({
-      model: provider('gpt-5'),
+      model: provider('gpt-5.5'),
       prompt: 'Explain quantum computing in simple terms',
-      temperature: 0.7,
-      maxTokens: 500,
     });
 
     console.log('Streaming response:');
     console.log('-------------------');
-    
+
     for await (const chunk of result.textStream) {
       process.stdout.write(chunk);
     }
-    
+
     console.log('\n-------------------');
-    
+
     const usage = await result.usage;
     console.log('Usage:', usage);
   } catch (error) {

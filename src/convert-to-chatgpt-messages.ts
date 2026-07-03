@@ -1,17 +1,17 @@
-import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/provider';
-import { ChatGPTMessage } from './chatgpt-oauth-settings';
+import type { LanguageModelV4Prompt, SharedV4Warning } from '@ai-sdk/provider';
+import type { ChatGPTMessage } from './chatgpt-oauth-settings';
 
 export function convertToChatGPTMessages({
   prompt,
   systemMessageMode = 'user',
 }: {
-  prompt: LanguageModelV2Prompt;
+  prompt: LanguageModelV4Prompt;
   systemMessageMode?: 'user' | 'system';
 }): {
   messages: ChatGPTMessage[];
-  warnings: LanguageModelV2CallWarning[];
+  warnings: SharedV4Warning[];
 } {
-  const warnings: LanguageModelV2CallWarning[] = [];
+  const warnings: SharedV4Warning[] = [];
   const messages: ChatGPTMessage[] = [];
 
   for (const message of prompt) {
@@ -53,17 +53,40 @@ export function convertToChatGPTMessages({
               }
 
               case 'file': {
+                warnings.push({
+                  type: 'unsupported',
+                  feature: `file-input:${part.mediaType}`,
+                  details: 'The ChatGPT OAuth provider serializes file inputs as text placeholders',
+                });
                 if (part.mediaType.startsWith('image/')) {
-                  if (part.data instanceof URL) {
-                    parts.push(`[Image: ${part.data.href}]`);
-                  } else if (typeof part.data === 'string') {
-                    parts.push(`[Image: data:${part.mediaType};base64,${part.data}]`);
-                  } else {
-                    const base64String = convertUint8ArrayToBase64(part.data as Uint8Array);
-                    parts.push(`[Image: data:${part.mediaType};base64,${base64String}]`);
+                  switch (part.data.type) {
+                    case 'url':
+                      parts.push(`[Image: ${part.data.url.href}]`);
+                      break;
+                    case 'data': {
+                      const base64 =
+                        typeof part.data.data === 'string'
+                          ? part.data.data
+                          : convertUint8ArrayToBase64(part.data.data);
+                      parts.push(`[Image: data:${part.mediaType};base64,${base64}]`);
+                      break;
+                    }
+                    default:
+                      parts.push(`[Image: ${part.filename ?? 'unsupported image reference'}]`);
+                      warnings.push({
+                        type: 'unsupported',
+                        feature: `file-data:${part.data.type}`,
+                        details: 'ChatGPT OAuth only supports inline or URL image inputs',
+                      });
                   }
                 } else {
-                  parts.push(`[File: ${part.filename || 'unnamed'}]`);
+                  const text =
+                    part.data.type === 'text'
+                      ? `\n${part.data.text}`
+                      : part.data.type === 'url'
+                        ? `: ${part.data.url.href}`
+                        : '';
+                  parts.push(`[File: ${part.filename || 'unnamed'}]${text}`);
                 }
                 break;
               }
@@ -121,17 +144,51 @@ export function convertToChatGPTMessages({
           }
         }
 
+        for (const part of message.content) {
+          if (part.type !== 'text' && part.type !== 'tool-call' && part.type !== 'reasoning') {
+            warnings.push({
+              type: 'unsupported',
+              feature: `assistant-content:${part.type}`,
+              details: 'This assistant content part is omitted from the ChatGPT OAuth request',
+            });
+          }
+        }
+
         messages.push(chatGPTMessage);
         break;
       }
 
       case 'tool': {
         for (const toolResponse of message.content) {
+          if (toolResponse.type === 'tool-approval-response') {
+            warnings.push({
+              type: 'unsupported',
+              feature: 'tool-approval-response',
+              details: 'ChatGPT OAuth does not support provider-side tool approvals',
+            });
+            continue;
+          }
+
           let content: string;
-          if (toolResponse.output.type === 'text' || toolResponse.output.type === 'error-text') {
-            content = toolResponse.output.value;
-          } else {
-            content = JSON.stringify(toolResponse.output.value);
+          switch (toolResponse.output.type) {
+            case 'text':
+            case 'error-text':
+              content = toolResponse.output.value;
+              break;
+            case 'json':
+            case 'error-json':
+              content = JSON.stringify(toolResponse.output.value);
+              break;
+            case 'execution-denied':
+              content = toolResponse.output.reason
+                ? `Tool execution denied: ${toolResponse.output.reason}`
+                : 'Tool execution denied';
+              break;
+            case 'content':
+              content = toolResponse.output.value
+                .map((part) => (part.type === 'text' ? part.text : `[${part.type}]`))
+                .join('\n');
+              break;
           }
           messages.push({
             role: 'tool',
@@ -156,9 +213,5 @@ export function convertToChatGPTMessages({
 }
 
 function convertUint8ArrayToBase64(array: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < array.byteLength; i++) {
-    binary += String.fromCharCode(array[i]);
-  }
-  return btoa(binary);
+  return Buffer.from(array).toString('base64');
 }

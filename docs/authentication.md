@@ -1,206 +1,104 @@
-# Authentication Guide
+# Authentication
 
-This guide covers all authentication options for the ChatGPT OAuth provider.
+## Codex CLI
 
-## Authentication Methods
-
-### Option 1: Use Codex CLI (Recommended for Quick Start)
-
-Install and authenticate with OpenAI's Codex CLI:
+The default authentication provider reads the Codex CLI credential file:
 
 ```bash
-npm install -g @openai/codex
+npm install --global @openai/codex
 codex login
 ```
 
-This will create OAuth credentials at `~/.codex/auth.json` that the provider can use automatically.
+```typescript
+import { createChatGPTOAuth } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
 
-### Option 2: Implement Your Own OAuth Flow
+const chatgpt = createChatGPTOAuth();
+```
 
-See the [complete OAuth implementation example](../oauth-example/) that demonstrates how to implement the full OAuth flow without Codex CLI, including:
-- PKCE (Proof Key for Code Exchange) flow
-- Token refresh handling
-- Secure credential storage
-- Working CLI implementation
+The default path is `~/.codex/auth.json`. Use `credentialsPath` to select another
+Codex-format file.
 
-### Option 3: Environment Variables
-
-Set the following environment variables:
+## Environment Variables
 
 ```bash
-export CHATGPT_OAUTH_ACCESS_TOKEN="your-access-token"
-export CHATGPT_OAUTH_ACCOUNT_ID="your-account-id"
-export CHATGPT_OAUTH_REFRESH_TOKEN="your-refresh-token" # Optional, for auto-refresh
+export CHATGPT_OAUTH_ACCESS_TOKEN='...'
+export CHATGPT_OAUTH_ACCOUNT_ID='...'
+export CHATGPT_OAUTH_REFRESH_TOKEN='...' # optional
 ```
 
-### Option 4: Direct Credentials
+Environment variables are used when direct credentials and a credential file are
+not configured.
 
-Pass credentials directly to the provider:
+## Direct Credentials
 
 ```typescript
-import { createChatGPTOAuth } from 'ai-sdk-provider-chatgpt-oauth';
-
-const provider = createChatGPTOAuth({
+const chatgpt = createChatGPTOAuth({
   credentials: {
-    accessToken: 'your-access-token',
-    accountId: 'your-account-id',
-    refreshToken: 'your-refresh-token', // Optional
+    accessToken: process.env.CHATGPT_OAUTH_ACCESS_TOKEN!,
+    accountId: process.env.CHATGPT_OAUTH_ACCOUNT_ID!,
+    refreshToken: process.env.CHATGPT_OAUTH_REFRESH_TOKEN,
+    expiresAt: Date.now() + 60 * 60 * 1000,
   },
 });
 ```
 
-### Option 5: Custom Authentication Provider
+`expiresAt` is milliseconds since the Unix epoch. When it is within 60 seconds of
+expiry, `autoRefresh` is enabled, and a refresh token exists, the provider
+refreshes it before making a request.
 
-Implement your own authentication logic:
+## Custom Provider
+
+Implement `AuthProvider` when credentials live in a keychain, secret manager, or
+another service:
 
 ```typescript
-import { createChatGPTOAuth, AuthProvider } from 'ai-sdk-provider-chatgpt-oauth';
+import type {
+  AuthProvider,
+  ChatGPTOAuthCredentials,
+} from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
 
-class CustomAuthProvider implements AuthProvider {
-  async getCredentials() {
-    // Your custom logic to get credentials
-    // Could read from a database, key vault, etc.
-    return {
-      accessToken: 'token',
-      accountId: 'account-id',
-    };
-  }
-  
-  async refreshCredentials(refreshToken: string) {
-    // Optional: Implement token refresh
-    const response = await fetch('https://chatgpt.com/oauth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-    const data = await response.json();
-    return {
-      accessToken: data.access_token,
-      accountId: data.account_id,
-      refreshToken: data.refresh_token,
-    };
+class KeychainAuthProvider implements AuthProvider {
+  async getCredentials(): Promise<ChatGPTOAuthCredentials> {
+    return readCredentialsFromKeychain();
   }
 }
 
-const provider = createChatGPTOAuth({
-  authProvider: new CustomAuthProvider(),
+const chatgpt = createChatGPTOAuth({
+  authProvider: new KeychainAuthProvider(),
 });
 ```
 
-## Token Refresh
+A custom provider owns loading and refreshing its credentials.
 
-The provider automatically refreshes expired tokens when:
+## Standalone PKCE Flow
 
-1. A refresh token is available
-2. `autoRefresh` is enabled (default: true)
-3. The access token is within 60 seconds of expiring
+[`oauth-example`](../oauth-example/) contains a complete localhost PKCE flow:
 
-### Enable Auto-Refresh
-
-```typescript
-const provider = createChatGPTOAuth({
-  autoRefresh: true, // Default
-});
+```bash
+cd oauth-example
+npm install
+CHATGPT_OAUTH_BROWSER=Safari npm run login
+npm test
 ```
 
-### Manual Token Refresh
+The example:
 
-If you prefer to handle token refresh manually:
+1. Creates a PKCE verifier and SHA-256 challenge.
+2. Opens the OpenAI authorization page.
+3. Validates the callback state.
+4. Exchanges the authorization code.
+5. Stores access and refresh tokens in an ignored file with mode `0600`.
+6. Verifies live AI SDK calls.
 
-```typescript
-const provider = createChatGPTOAuth({
-  autoRefresh: false,
-  credentials: {
-    accessToken: 'current-token',
-    accountId: 'account-id',
-    refreshToken: 'refresh-token',
-  },
-});
+The localhost implementation is a development reference. Production applications
+should use platform-appropriate encrypted credential storage and callback
+handling.
 
-// Handle token expiration in your code
-try {
-  const result = await generateText({ model: provider('gpt-5'), prompt: 'Hello' });
-} catch (error) {
-  if (error.message.includes('401')) {
-    // Refresh token and retry
-    const newToken = await refreshMyToken();
-    // Update provider with new credentials
-  }
-}
-```
+## Security
 
-## Credential Sources Priority
-
-The provider checks for credentials in this order:
-
-1. Directly provided credentials
-2. Custom auth provider
-3. Environment variables
-4. Credentials file (default: `~/.codex/auth.json`)
-
-## Credential File Format
-
-The credentials file (e.g., `~/.codex/auth.json`) should have this format:
-
-```json
-{
-  "access_token": "your-access-token",
-  "account_id": "your-account-id",
-  "refresh_token": "your-refresh-token",
-  "expires_at": 1234567890
-}
-```
-
-## Custom Credential File Path
-
-To use a different credential file location:
-
-```typescript
-const provider = createChatGPTOAuth({
-  credentialsPath: '/path/to/your/credentials.json',
-});
-```
-
-## Security Best Practices
-
-1. **Never commit credentials** to version control
-2. **Use environment variables** for production deployments
-3. **Implement token refresh** to minimize exposure
-4. **Store credentials securely** (encrypted, key vault, etc.)
-5. **Rotate tokens regularly** when possible
-6. **Use minimal scopes** for your OAuth tokens
-
-## Troubleshooting
-
-### No credentials found
-
-Ensure you have either:
-- Authenticated with Codex CLI: `codex login`
-- Set environment variables
-- Passed credentials directly
-- Implemented a custom auth provider
-
-### Token expired
-
-Enable `autoRefresh` or provide a refresh token:
-
-```typescript
-const provider = createChatGPTOAuth({
-  autoRefresh: true,
-});
-```
-
-### Invalid credentials
-
-Check that your credentials are valid:
-- Access token is not expired
-- Account ID matches the token
-- Refresh token is valid (if using auto-refresh)
-
-### Rate limiting
-
-The provider includes automatic retry logic for rate limits. You can also implement custom retry logic in your application.
-
-## See Also
-
-- [OAuth Implementation Example](../oauth-example/)
-- [Check Authentication Example](../examples/check-auth.ts)
+- Never commit tokens, `.codex/auth.json`, `.env`, or `oauth-tokens.json`.
+- Treat access and refresh tokens like passwords.
+- Do not print `Authorization` headers in logs.
+- Restrict credential-file permissions.
+- Use only trusted `baseURL` values because OAuth headers are sent to that host.
+- Revoke or replace credentials when they may have been exposed.

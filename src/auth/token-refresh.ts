@@ -1,11 +1,12 @@
-import { ChatGPTOAuthCredentials } from '../chatgpt-oauth-settings';
+import type { ChatGPTOAuthCredentials } from '../chatgpt-oauth-settings';
+import { ChatGPTOAuthError } from '../chatgpt-oauth-error';
 
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 const TOKEN_URL = 'https://auth.openai.com/oauth/token';
 
 interface TokenResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   id_token: string;
   expires_in: number;
 }
@@ -28,19 +29,32 @@ export async function refreshAccessToken(
     });
 
     if (!response.ok) {
-      throw new Error(`Token refresh failed: ${response.statusText}`);
+      throw new ChatGPTOAuthError(
+        `Token refresh failed: ${response.status} ${response.statusText}`,
+        'TOKEN_REFRESH_FAILED',
+        response.status
+      );
     }
 
     const data = (await response.json()) as TokenResponse;
 
     return {
       accessToken: data.access_token,
-      refreshToken: data.refresh_token,
+      refreshToken: data.refresh_token ?? refreshToken,
       accountId,
       expiresAt: Date.now() + data.expires_in * 1000,
     };
   } catch (error) {
-    console.error('Token refresh error:', error);
-    throw new Error('Failed to refresh ChatGPT OAuth token');
+    if (error instanceof ChatGPTOAuthError) {
+      throw error;
+    }
+    throw new ChatGPTOAuthError(
+      'Failed to refresh ChatGPT OAuth token',
+      'TOKEN_REFRESH_FAILED',
+      undefined,
+      {
+        cause: error,
+      }
+    );
   }
 }

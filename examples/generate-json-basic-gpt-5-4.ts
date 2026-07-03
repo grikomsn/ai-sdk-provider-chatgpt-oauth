@@ -2,7 +2,7 @@
 /**
  * Basic JSON Generation with GPT-5 Codex via ChatGPT OAuth
  *
- * Mirrors generate-json-basic.ts but targets the gpt-5-codex model.
+ * Mirrors generate-json-basic.ts but targets the gpt-5.4 model.
  */
 
 import { generateText } from 'ai';
@@ -12,7 +12,7 @@ import { z } from 'zod';
 const chatgptOAuth = createChatGPTOAuth();
 
 console.log('🎯 GPT-5 Codex: Basic JSON Generation\n');
-console.log('=' .repeat(60));
+console.log('='.repeat(60));
 
 function parseJSON(text: string): any {
   const trimmed = text.trim();
@@ -27,7 +27,7 @@ async function example1_simpleObject() {
   console.log('\n1️⃣  Simple Object with Primitives\n');
 
   const result = await generateText({
-    model: chatgptOAuth('gpt-5-codex'),
+    model: chatgptOAuth('gpt-5.4'),
     prompt: `Generate a profile for a software developer named Sarah.
 
 OUTPUT ONLY JSON with these exact fields:
@@ -63,7 +63,7 @@ async function example2_arrays() {
   console.log('2️⃣  Object with Arrays\n');
 
   const result = await generateText({
-    model: chatgptOAuth('gpt-5-codex'),
+    model: chatgptOAuth('gpt-5.4'),
     prompt: `Generate data for a web development team working on e-commerce projects.
 
 RETURN ONLY THIS JSON STRUCTURE:
@@ -99,7 +99,7 @@ async function example3_optionalFields() {
   console.log('3️⃣  Object with Optional Fields\n');
 
   const result = await generateText({
-    model: chatgptOAuth('gpt-5-codex'),
+    model: chatgptOAuth('gpt-5.4'),
     prompt: `Generate a product listing for a wireless keyboard.
 
 OUTPUT JSON MATCHING THIS SCHEMA:
@@ -142,7 +142,7 @@ async function example4_dataTypes() {
   console.log('4️⃣  Various Data Types\n');
 
   const result = await generateText({
-    model: chatgptOAuth('gpt-5-codex'),
+    model: chatgptOAuth('gpt-5.4'),
     prompt: `Generate a user account with various field types.
 
 JSON STRUCTURE:
@@ -186,7 +186,7 @@ async function example5_bestPractices() {
   console.log('5️⃣  Best Practices\n');
 
   const result = await generateText({
-    model: chatgptOAuth('gpt-5-codex'),
+    model: chatgptOAuth('gpt-5.4'),
     prompt:
       'Generate a JSON object summarizing TypeScript best practices with fields: title (string), summary (string), readingTime (number minutes), tags (array of strings). OUTPUT ONLY JSON.',
   });

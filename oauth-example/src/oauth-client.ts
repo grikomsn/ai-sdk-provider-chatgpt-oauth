@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 export interface OAuthConfig {
   clientId?: string;
@@ -36,11 +36,12 @@ export class OAuthClient {
   private readonly scope: string;
 
   constructor(config: OAuthConfig = {}) {
-    this.clientId = config.clientId || 'app_EMoamEEZ73f0CkXaXp7hrann';
-    this.issuer = config.issuer || 'https://auth.openai.com';
-    this.redirectPort = config.redirectPort || 1455;
+    this.clientId =
+      config.clientId || process.env.OAUTH_CLIENT_ID || 'app_EMoamEEZ73f0CkXaXp7hrann';
+    this.issuer = config.issuer || process.env.OAUTH_ISSUER || 'https://auth.openai.com';
+    this.redirectPort = config.redirectPort || parsePort(process.env.OAUTH_REDIRECT_PORT) || 1455;
     this.redirectUri = `http://localhost:${this.redirectPort}/auth/callback`;
-    this.scope = config.scope || 'openid profile email offline_access';
+    this.scope = config.scope || process.env.OAUTH_SCOPE || 'openid profile email offline_access';
   }
 
   /**
@@ -55,10 +56,8 @@ export class OAuthClient {
    */
   private async generatePKCE(): Promise<PKCEPair> {
     const verifier = this.generateRandomString(32);
-    const challenge = createHash('sha256')
-      .update(verifier)
-      .digest('base64url');
-    
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+
     return { verifier, challenge };
   }
 
@@ -77,7 +76,7 @@ export class OAuthClient {
     url.searchParams.set('code_challenge', pkce.challenge);
     url.searchParams.set('code_challenge_method', 'S256');
     url.searchParams.set('state', state);
-    
+
     // ChatGPT-specific parameters
     url.searchParams.set('id_token_add_organizations', 'true');
     url.searchParams.set('codex_cli_simplified_flow', 'true');
@@ -152,7 +151,7 @@ export class OAuthClient {
     try {
       const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
       const authData = payload['https://api.openai.com/auth'];
-      
+
       if (!authData || !authData.chatgpt_account_id) {
         throw new Error('ChatGPT account ID not found in token');
       }
@@ -162,4 +161,13 @@ export class OAuthClient {
       throw new Error(`Failed to extract account ID: ${error}`);
     }
   }
+}
+
+function parsePort(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const port = Number.parseInt(value, 10);
+  return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : undefined;
 }

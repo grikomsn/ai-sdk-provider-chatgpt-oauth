@@ -89,6 +89,7 @@ desktop.ini
 # Authentication and Secrets
 auth.json
 .codex/
+.npmrc
 *.pem
 *.key
 *.crt
@@ -96,6 +97,7 @@ auth.json
 *.pfx
 credentials.json
 secrets.json
+oauth-tokens.json
 
 # Documentation
 /docs/dev/

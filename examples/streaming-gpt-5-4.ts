@@ -1,5 +1,5 @@
 import { streamText } from 'ai';
-import { createChatGPTOAuth } from '../dist/index.mjs';
+import { createChatGPTOAuth } from '../src/index';
 
 async function main() {
   try {
@@ -8,9 +8,8 @@ async function main() {
     });
 
     const { textStream, usage, warnings } = await streamText({
-      model: provider('gpt-5-codex'),
+      model: provider('gpt-5.4'),
       prompt: 'Outline a focused debugging plan for tracking flaky tests.',
-      maxToolRoundtrips: 0,
     });
 
     console.log('Streaming response:');
@@ -22,8 +21,12 @@ async function main() {
 
     console.log('\n-------------------');
 
-    if (warnings.length > 0) {
-      console.log('Warnings:', warnings.map((warning) => warning.message ?? JSON.stringify(warning)));
+    const resolvedWarnings = await warnings;
+    if (resolvedWarnings && resolvedWarnings.length > 0) {
+      console.log(
+        'Warnings:',
+        resolvedWarnings.map((warning) => JSON.stringify(warning))
+      );
     }
 
     console.log('Usage:', await usage);

@@ -1,5 +1,5 @@
 import { generateText } from 'ai';
-import { createChatGPTOAuth } from '../dist/index.mjs';
+import { createChatGPTOAuth } from '../src/index';
 
 async function main() {
   try {
@@ -8,18 +8,17 @@ async function main() {
     });
 
     const result = await generateText({
-      model: provider('gpt-5-codex'),
+      model: provider('gpt-5.4'),
       prompt: 'Reply with a single sentence describing your CLI workflow.',
-      maxToolRoundtrips: 0,
     });
 
     console.log('Generated text:', result.text);
     console.log('Usage:', result.usage);
 
-    if (result.warnings.length > 0) {
+    if (result.warnings && result.warnings.length > 0) {
       console.log('\nWarnings:');
       for (const warning of result.warnings) {
-        console.log('-', warning.message ?? JSON.stringify(warning));
+        console.log('-', JSON.stringify(warning));
       }
     }
   } catch (error) {

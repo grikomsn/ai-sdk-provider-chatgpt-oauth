@@ -2,9 +2,10 @@ export class ChatGPTOAuthError extends Error {
   constructor(
     message: string,
     public readonly code?: string,
-    public readonly statusCode?: number
+    public readonly statusCode?: number,
+    options?: ErrorOptions
   ) {
-    super(message);
+    super(message, options);
     this.name = 'ChatGPTOAuthError';
   }
 }

@@ -78,7 +78,8 @@ export function validateToolResponse(toolName: string, args: string): unknown {
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(
-        `Failed to parse tool arguments as JSON for tool '${toolName}': ${error.message}`
+        `Failed to parse tool arguments as JSON for tool '${toolName}': ${error.message}`,
+        { cause: error }
       );
     }
     throw error;

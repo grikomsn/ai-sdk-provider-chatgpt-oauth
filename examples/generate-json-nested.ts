@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 /**
  * Nested JSON Generation with ChatGPT OAuth
- * 
+ *
  * Demonstrates complex nested JSON generation using prompt engineering.
  * Since generateObject is not supported, we use explicit prompts to
  * achieve structured output.
- * 
+ *
  * Topics covered:
  * - Multi-level nested structures
  * - Arrays of objects
@@ -20,24 +20,21 @@ import { z } from 'zod';
 const chatgptOAuth = createChatGPTOAuth();
 
 console.log('🏗️  ChatGPT OAuth: Nested JSON Generation\n');
-console.log('=' .repeat(60));
+console.log('='.repeat(60));
 
 // Helper to extract and validate JSON
-async function generateJSON<T>(
-  prompt: string,
-  schema: z.ZodType<T>
-): Promise<T> {
+async function generateJSON<T>(prompt: string, schema: z.ZodType<T>): Promise<T> {
   const result = await generateText({
-    model: chatgptOAuth('gpt-5'),
+    model: chatgptOAuth('gpt-5.5'),
     prompt,
   });
-  
+
   const text = result.text.trim();
   const jsonMatch = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
   if (!jsonMatch) {
     throw new Error('No JSON found in response');
   }
-  
+
   const parsed = JSON.parse(jsonMatch[0]);
   return schema.parse(parsed);
 }
@@ -45,7 +42,7 @@ async function generateJSON<T>(
 // Example 1: Multi-level nested structure
 async function example1_deepNesting() {
   console.log('\n1️⃣  Deep Nested Structure\n');
-  
+
   const CompanySchema = z.object({
     company: z.object({
       name: z.string(),
@@ -63,20 +60,24 @@ async function example1_deepNesting() {
           longitude: z.number(),
         }),
       }),
-      departments: z.array(z.object({
-        name: z.string(),
-        headCount: z.number(),
-        manager: z.object({
+      departments: z.array(
+        z.object({
           name: z.string(),
-          email: z.string().email(),
-          yearsExperience: z.number(),
-        }),
-        teams: z.array(z.object({
-          name: z.string(),
-          members: z.number(),
-          focus: z.string(),
-        })),
-      })),
+          headCount: z.number(),
+          manager: z.object({
+            name: z.string(),
+            email: z.string().email(),
+            yearsExperience: z.number(),
+          }),
+          teams: z.array(
+            z.object({
+              name: z.string(),
+              members: z.number(),
+              focus: z.string(),
+            })
+          ),
+        })
+      ),
     }),
   });
 
@@ -137,7 +138,7 @@ JSON OUTPUT:`;
 // Example 2: E-commerce order structure
 async function example2_ecommerceOrder() {
   console.log('2️⃣  E-commerce Order Structure\n');
-  
+
   const OrderSchema = z.object({
     orderId: z.string(),
     orderDate: z.string(),
@@ -154,13 +155,15 @@ async function example2_ecommerceOrder() {
         country: z.string(),
       }),
     }),
-    items: z.array(z.object({
-      productId: z.string(),
-      productName: z.string(),
-      quantity: z.number().int().positive(),
-      unitPrice: z.number().positive(),
-      subtotal: z.number().positive(),
-    })),
+    items: z.array(
+      z.object({
+        productId: z.string(),
+        productName: z.string(),
+        quantity: z.number().int().positive(),
+        unitPrice: z.number().positive(),
+        subtotal: z.number().positive(),
+      })
+    ),
     totals: z.object({
       subtotal: z.number(),
       tax: z.number(),
@@ -221,7 +224,7 @@ OUTPUT ONLY JSON:`;
 // Example 3: Blog post with metadata
 async function example3_blogPost() {
   console.log('3️⃣  Blog Post with Rich Metadata\n');
-  
+
   const BlogPostSchema = z.object({
     post: z.object({
       id: z.string(),
@@ -238,10 +241,12 @@ async function example3_blogPost() {
       }),
       content: z.object({
         summary: z.string(),
-        sections: z.array(z.object({
-          heading: z.string(),
-          body: z.string(),
-        })),
+        sections: z.array(
+          z.object({
+            heading: z.string(),
+            body: z.string(),
+          })
+        ),
       }),
       metadata: z.object({
         readingTime: z.number(),
@@ -303,7 +308,7 @@ OUTPUT ONLY JSON:`;
 // Example 4: Configuration file structure
 async function example4_configFile() {
   console.log('4️⃣  Application Configuration\n');
-  
+
   const ConfigSchema = z.object({
     application: z.object({
       name: z.string(),
@@ -400,15 +405,15 @@ async function main() {
     await example2_ecommerceOrder();
     await example3_blogPost();
     await example4_configFile();
-    
-    console.log('=' .repeat(60));
+
+    console.log('='.repeat(60));
     console.log('✅ All nested examples completed successfully!');
     console.log('\n🎯 Key Insights:');
     console.log('- Deep nesting works with clear prompt structure');
     console.log('- Arrays of objects need explicit formatting');
     console.log('- Complex schemas require detailed prompts');
     console.log('- Validation with Zod ensures type safety');
-    console.log('\n💡 Important: While we can\'t use generateObject,');
+    console.log("\n💡 Important: While we can't use generateObject,");
     console.log('   prompt engineering achieves similar results!');
   } catch (error) {
     console.error('❌ Error:', error.message);

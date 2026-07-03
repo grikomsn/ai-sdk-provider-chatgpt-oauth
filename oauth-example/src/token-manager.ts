@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
-import { dirname, resolve } from 'path';
-import { OAuthClient, TokenResponse } from './oauth-client.js';
-import type { ChatGPTOAuthCredentials } from 'ai-sdk-provider-chatgpt-oauth';
+import { chmodSync, readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { OAuthClient } from './oauth-client.js';
+import type { TokenResponse } from './oauth-client.js';
+import type { ChatGPTOAuthCredentials } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
 
 export interface StoredTokens {
   accessToken: string;
@@ -17,9 +18,10 @@ export class TokenManager {
   private oauthClient: OAuthClient;
 
   constructor(storagePath?: string) {
-    this.storagePath = storagePath || resolve(process.cwd(), 'oauth-tokens.json');
+    this.storagePath =
+      storagePath || process.env.TOKEN_STORAGE_PATH || resolve(process.cwd(), 'oauth-tokens.json');
     this.oauthClient = new OAuthClient();
-    
+
     // Ensure directory exists
     const dir = dirname(this.storagePath);
     if (!existsSync(dir)) {
@@ -33,16 +35,16 @@ export class TokenManager {
   saveTokens(tokens: TokenResponse): void {
     try {
       const accountId = this.oauthClient.extractAccountId(tokens.access_token);
-      
+
       const storedTokens: StoredTokens = {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        expiresAt: Date.now() + (tokens.expires_in * 1000),
+        expiresAt: Date.now() + tokens.expires_in * 1000,
         accountId,
         createdAt: Date.now(),
       };
 
-      writeFileSync(this.storagePath, JSON.stringify(storedTokens, null, 2));
+      this.writeTokens(storedTokens);
       console.log(`✅ Tokens saved to ${this.storagePath}`);
     } catch (error) {
       throw new Error(`Failed to save tokens: ${error}`);
@@ -90,19 +92,19 @@ export class TokenManager {
     try {
       console.log('🔄 Refreshing expired token...');
       const newTokens = await this.oauthClient.refreshAccessToken(stored.refreshToken);
-      
+
       // Update stored tokens
       const updatedTokens: StoredTokens = {
         ...stored,
         accessToken: newTokens.access_token,
         refreshToken: newTokens.refresh_token || stored.refreshToken,
-        expiresAt: Date.now() + (newTokens.expires_in * 1000),
+        expiresAt: Date.now() + newTokens.expires_in * 1000,
         lastRefreshed: Date.now(),
       };
 
-      writeFileSync(this.storagePath, JSON.stringify(updatedTokens, null, 2));
+      this.writeTokens(updatedTokens);
       console.log('✅ Token refreshed successfully');
-      
+
       return newTokens.access_token;
     } catch (error) {
       console.error(`Failed to refresh token: ${error}`);
@@ -125,11 +127,12 @@ export class TokenManager {
       return null;
     }
 
+    const current = this.loadTokens() ?? stored;
     return {
       accessToken,
-      refreshToken: stored.refreshToken,
-      accountId: stored.accountId || this.oauthClient.extractAccountId(accessToken),
-      expiresAt: stored.expiresAt,
+      refreshToken: current.refreshToken,
+      accountId: current.accountId || this.oauthClient.extractAccountId(accessToken),
+      expiresAt: current.expiresAt,
     };
   }
 
@@ -139,8 +142,6 @@ export class TokenManager {
   clearTokens(): void {
     if (existsSync(this.storagePath)) {
       try {
-        // Overwrite with empty object before deleting for security
-        writeFileSync(this.storagePath, '{}');
         unlinkSync(this.storagePath);
         console.log('✅ Tokens cleared');
       } catch (error) {
@@ -168,7 +169,7 @@ export class TokenManager {
 
     const now = Date.now();
     const expiresIn = stored.expiresAt - now;
-    
+
     if (expiresIn <= 0) {
       return {
         isAuthenticated: false,
@@ -186,5 +187,12 @@ export class TokenManager {
       expiresIn: expiryString,
       accountId: stored.accountId,
     };
+  }
+
+  private writeTokens(tokens: StoredTokens): void {
+    writeFileSync(this.storagePath, JSON.stringify(tokens, null, 2), {
+      mode: 0o600,
+    });
+    chmodSync(this.storagePath, 0o600);
   }
 }

@@ -1,7 +1,8 @@
-import { readFileSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
-import { ChatGPTOAuthCredentials } from '../chatgpt-oauth-settings';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import type { ChatGPTOAuthCredentials } from '../chatgpt-oauth-settings';
+import { ChatGPTOAuthError } from '../chatgpt-oauth-error';
 import { extractAccountIdFromToken } from './index';
 
 interface CodexAuthJson {
@@ -23,26 +24,25 @@ export function loadCredentialsFromFile(filePath?: string): ChatGPTOAuthCredenti
     const auth: CodexAuthJson = JSON.parse(content);
 
     if (!auth.tokens) {
-      throw new Error('No OAuth tokens found in auth.json');
+      throw new ChatGPTOAuthError('No OAuth tokens found in auth.json', 'INVALID_AUTH_FILE');
     }
 
     const { access_token, refresh_token, id_token, account_id } = auth.tokens;
 
     if (!access_token) {
-      throw new Error('No access token found in auth.json');
+      throw new ChatGPTOAuthError('No access token found in auth.json', 'INVALID_AUTH_FILE');
     }
 
     const accountId = account_id || extractAccountIdFromToken(id_token);
 
     if (!accountId) {
-      throw new Error('Could not determine account ID from auth.json');
+      throw new ChatGPTOAuthError(
+        'Could not determine account ID from auth.json',
+        'INVALID_AUTH_FILE'
+      );
     }
 
-    let expiresAt: number | undefined;
-    if (auth.last_refresh) {
-      const lastRefresh = new Date(auth.last_refresh).getTime();
-      expiresAt = lastRefresh + 28 * 24 * 60 * 60 * 1000;
-    }
+    const expiresAt = extractTokenExpiry(access_token) ?? extractTokenExpiry(id_token);
 
     return {
       accessToken: access_token,
@@ -52,8 +52,25 @@ export function loadCredentialsFromFile(filePath?: string): ChatGPTOAuthCredenti
     };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-      throw new Error(`Auth file not found at ${path}`);
+      throw new ChatGPTOAuthError(
+        `Auth file not found at ${path}`,
+        'AUTH_FILE_NOT_FOUND',
+        undefined,
+        { cause: error }
+      );
     }
     throw error;
+  }
+}
+
+export function extractTokenExpiry(token: string): number | undefined {
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString()) as {
+      exp?: unknown;
+    };
+    return typeof decoded.exp === 'number' ? decoded.exp * 1000 : undefined;
+  } catch {
+    return undefined;
   }
 }

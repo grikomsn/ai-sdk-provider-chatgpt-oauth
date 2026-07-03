@@ -1,4 +1,5 @@
-import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { createServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 
 export interface CallbackResult {
   code: string;
@@ -18,13 +19,31 @@ export class OAuthCallbackServer {
    */
   async waitForCallback(expectedState: string, timeoutMs: number = 300000): Promise<string> {
     return new Promise((resolve, reject) => {
-      let timeoutId: NodeJS.Timeout;
-      let serverClosed = false;
+      let timeoutId: NodeJS.Timeout | undefined;
+      let settled = false;
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        this.stop();
+      };
+      const resolveOnce = (code: string) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(code);
+      };
+      const rejectOnce = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
 
       // Create HTTP server
       this.server = createServer((req: IncomingMessage, res: ServerResponse) => {
         const url = new URL(req.url || '', `http://localhost:${this.port}`);
-        
+
         if (url.pathname === '/auth/callback') {
           const code = url.searchParams.get('code');
           const state = url.searchParams.get('state');
@@ -46,14 +65,13 @@ export class OAuthCallbackServer {
               </head>
               <body>
                 <div class="error">❌ Authorization Failed</div>
-                <div class="message">Error: ${error}</div>
-                <div class="message">${url.searchParams.get('error_description') || ''}</div>
+                <div class="message">Error: ${escapeHtml(error)}</div>
+                <div class="message">${escapeHtml(url.searchParams.get('error_description') || '')}</div>
               </body>
               </html>
             `);
-            
-            this.cleanup(timeoutId, serverClosed);
-            reject(new Error(`OAuth error: ${error}`));
+
+            rejectOnce(new Error(`OAuth error: ${error}`));
             return;
           }
 
@@ -76,9 +94,8 @@ export class OAuthCallbackServer {
               </body>
               </html>
             `);
-            
-            this.cleanup(timeoutId, serverClosed);
-            reject(new Error('State mismatch - possible CSRF attack'));
+
+            rejectOnce(new Error('State mismatch - possible CSRF attack'));
             return;
           }
 
@@ -112,9 +129,8 @@ export class OAuthCallbackServer {
               </body>
               </html>
             `);
-            
-            this.cleanup(timeoutId, serverClosed);
-            resolve(code);
+
+            resolveOnce(code);
             return;
           }
 
@@ -135,9 +151,8 @@ export class OAuthCallbackServer {
             </body>
             </html>
           `);
-          
-          this.cleanup(timeoutId, serverClosed);
-          reject(new Error('Missing authorization code'));
+
+          rejectOnce(new Error('Missing authorization code'));
         } else {
           // 404 for any other path
           res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -152,31 +167,14 @@ export class OAuthCallbackServer {
 
       // Set timeout
       timeoutId = setTimeout(() => {
-        if (!serverClosed) {
-          this.cleanup(timeoutId, serverClosed);
-          reject(new Error('Authorization timeout - no callback received'));
-        }
+        rejectOnce(new Error('Authorization timeout - no callback received'));
       }, timeoutMs);
 
       // Handle server errors
       this.server.on('error', (error) => {
-        this.cleanup(timeoutId, serverClosed);
-        reject(error);
+        rejectOnce(error);
       });
     });
-  }
-
-  /**
-   * Clean up server and timeout
-   */
-  private cleanup(timeoutId: NodeJS.Timeout, serverClosed: boolean): void {
-    if (!serverClosed) {
-      clearTimeout(timeoutId);
-      if (this.server) {
-        this.server.close();
-        this.server = undefined;
-      }
-    }
   }
 
   /**
@@ -188,4 +186,18 @@ export class OAuthCallbackServer {
       this.server = undefined;
     }
   }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[character] ?? character
+  );
 }

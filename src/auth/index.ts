@@ -1,4 +1,5 @@
-import { ChatGPTOAuthCredentials } from '../chatgpt-oauth-settings';
+import type { ChatGPTOAuthCredentials } from '../chatgpt-oauth-settings';
+import { ChatGPTOAuthError } from '../chatgpt-oauth-error';
 import { loadCredentialsFromFile } from './credentials-loader';
 import { refreshAccessToken } from './token-refresh';
 
@@ -29,8 +30,11 @@ export class DefaultAuthProvider implements AuthProvider {
       if (!this.refreshPromise) {
         this.refreshPromise = this.refreshToken();
       }
-      this.credentials = await this.refreshPromise;
-      this.refreshPromise = undefined;
+      try {
+        this.credentials = await this.refreshPromise;
+      } finally {
+        this.refreshPromise = undefined;
+      }
     }
 
     return this.credentials;
@@ -58,11 +62,15 @@ export class DefaultAuthProvider implements AuthProvider {
 
     try {
       return loadCredentialsFromFile();
-    } catch {
+    } catch (error) {
+      if (error instanceof ChatGPTOAuthError && error.code !== 'AUTH_FILE_NOT_FOUND') {
+        throw error;
+      }
       throw new Error(
         'No ChatGPT OAuth credentials found. Please provide credentials directly, ' +
           'set environment variables (CHATGPT_OAUTH_ACCESS_TOKEN, CHATGPT_OAUTH_ACCOUNT_ID), ' +
-          'or ensure ~/.codex/auth.json exists with valid credentials.'
+          'or ensure ~/.codex/auth.json exists with valid credentials.',
+        { cause: error }
       );
     }
   }
@@ -80,7 +88,7 @@ export class DefaultAuthProvider implements AuthProvider {
 
   private async refreshToken(): Promise<ChatGPTOAuthCredentials> {
     if (!this.credentials?.refreshToken) {
-      throw new Error('No refresh token available');
+      throw new ChatGPTOAuthError('No refresh token available', 'REFRESH_TOKEN_MISSING');
     }
 
     try {
@@ -91,8 +99,15 @@ export class DefaultAuthProvider implements AuthProvider {
 
       return newCredentials;
     } catch (error) {
-      console.error('Failed to refresh token:', error);
-      throw new Error('Failed to refresh ChatGPT OAuth token');
+      if (error instanceof ChatGPTOAuthError) {
+        throw error;
+      }
+      throw new ChatGPTOAuthError(
+        'Failed to refresh ChatGPT OAuth token',
+        'TOKEN_REFRESH_FAILED',
+        undefined,
+        { cause: error }
+      );
     }
   }
 }
@@ -100,11 +115,21 @@ export class DefaultAuthProvider implements AuthProvider {
 export function extractAccountIdFromToken(idToken: string): string {
   try {
     const payload = idToken.split('.')[1];
-    const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString()) as {
+      [key: string]: unknown;
+      'https://api.openai.com/auth'?: {
+        chatgpt_account_id?: string;
+      };
+    };
 
-    return decoded['https://chatgpt.com/account_id'] || decoded.account_id || decoded.sub || '';
-  } catch (error) {
-    console.error('Failed to extract account ID from token:', error);
+    const accountId =
+      decoded['https://chatgpt.com/account_id'] ??
+      decoded['https://api.openai.com/auth']?.chatgpt_account_id ??
+      decoded.account_id ??
+      decoded.sub;
+
+    return typeof accountId === 'string' ? accountId : '';
+  } catch {
     return '';
   }
 }
