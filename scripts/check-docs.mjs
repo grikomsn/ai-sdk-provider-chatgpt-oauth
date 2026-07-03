@@ -1,29 +1,20 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
-const markdownFiles = execFileSync(
-  'rg',
-  [
-    '--files',
-    '--hidden',
-    '-g',
-    '*.md',
-    '-g',
-    '!.git/**',
-    '-g',
-    '!node_modules/**',
-    '-g',
-    '!coverage/**',
-  ],
-  {
-    encoding: 'utf8',
-  }
-)
-  .trim()
-  .split('\n')
-  .filter(Boolean);
+const ignoredDirectories = new Set(['.git', 'coverage', 'dist', 'node_modules']);
+
+function findMarkdownFiles(directory = '.') {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return ignoredDirectories.has(entry.name) ? [] : findMarkdownFiles(path);
+    }
+    return entry.isFile() && entry.name.endsWith('.md') ? [path] : [];
+  });
+}
+
+const markdownFiles = findMarkdownFiles().sort();
 
 const failures = [];
 const markdownLink = /!?\[[^\]]*]\(([^)]+)\)/g;
