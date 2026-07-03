@@ -8,7 +8,7 @@ import { ChatGPTOAuthError, createChatGPTOAuth, type ChatGPTOAuthProvider } from
 
 async function testModel(provider: ChatGPTOAuthProvider, modelId: string, description: string) {
   console.log(`\n${modelId} - ${description}`);
-  console.log('─'.repeat(50));
+  console.log('-'.repeat(50));
 
   try {
     const result = await generateText({
@@ -16,12 +16,12 @@ async function testModel(provider: ChatGPTOAuthProvider, modelId: string, descri
       prompt: 'Respond with a single sentence about your capabilities.',
     });
 
-    console.log('✅ SUCCESS');
+    console.log('SUCCESS');
     console.log(`Response: ${result.text}`);
     console.log(`Tokens used: ${result.usage.totalTokens}`);
     console.log(`Finish reason: ${result.finishReason}`);
   } catch (error) {
-    console.log('❌ ERROR');
+    console.log('ERROR');
     console.log(`Error message: ${error instanceof Error ? error.message : String(error)}`);
 
     if (error instanceof ChatGPTOAuthError && error.code === 'MODEL_NOT_AVAILABLE') {
@@ -42,7 +42,7 @@ async function main() {
   console.log('and demonstrates the error when using unsupported models.\n');
 
   // Test working models
-  console.log('\n🟢 WORKING MODELS:');
+  console.log('\nWORKING MODELS:');
   await testModel(provider, 'gpt-5.5', 'Current GPT-5 model (372k context)');
 
   await testModel(provider, 'gpt-5.4', 'GPT-5 model (272k context)');
@@ -50,13 +50,13 @@ async function main() {
   await testModel(provider, 'gpt-5.4-mini', 'Smaller GPT-5 model (272k context)');
 
   // Test an unsupported model to show the error
-  console.log('\n\n🔴 UNSUPPORTED MODEL EXAMPLE:');
+  console.log('\n\nUNSUPPORTED MODEL EXAMPLE:');
   await testModel(provider, 'o3', 'Advanced reasoning model (requires API key access, not OAuth)');
 
   console.log('\n' + '='.repeat(60));
   console.log('Summary:');
-  console.log('  • Availability comes from the authenticated workspace catalog');
-  console.log('  • The catalog can change independently of this package');
+  console.log('- Availability comes from the authenticated workspace catalog');
+  console.log('- The catalog can change independently of this package');
   console.log('='.repeat(60));
 }
 

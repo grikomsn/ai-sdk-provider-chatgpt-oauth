@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { describe, expect, it } from 'vitest';
-import { generateText, streamText } from 'ai';
+import { generateText, simulateReadableStream, streamText } from 'ai';
 import type { SharedV4Warning } from '@ai-sdk/provider';
 import { ChatGPTOAuthLanguageModel } from '../chatgpt-oauth-language-model';
 import type { AuthProvider } from '../auth';
@@ -29,6 +29,11 @@ const prompt = [
     ],
   },
 ];
+
+type CapturedRequest = {
+  url: string;
+  body?: ChatGPTRequest;
+};
 
 const baseInstructionsPath = join(__dirname, '..', 'codex-instructions.txt');
 const codexInstructionsPath = join(__dirname, '..', 'codex-gpt5-codex-instructions.txt');
@@ -132,7 +137,7 @@ describe('ChatGPTOAuthLanguageModel', () => {
   });
 
   it('generates text through AI SDK v7 with live model instructions and V4 usage', async () => {
-    const requests: Array<{ url: string; body?: ChatGPTRequest }> = [];
+    const requests: CapturedRequest[] = [];
     const fetch = createMockFetch(requests, [
       {
         type: 'response.reasoning_summary_text.delta',
@@ -191,12 +196,16 @@ describe('ChatGPTOAuthLanguageModel', () => {
     expect(requests[1].body).toMatchObject({
       model: 'gpt-5.5',
       instructions: 'Current model instructions',
+      reasoning: {
+        effort: 'medium',
+        summary: 'auto',
+      },
       stream: true,
     });
   });
 
   it('streams correctly framed V4 text parts through AI SDK v7', async () => {
-    const requests: Array<{ url: string; body?: ChatGPTRequest }> = [];
+    const requests: CapturedRequest[] = [];
     const fetch = createMockFetch(requests, [
       { type: 'response.output_text.delta', delta: 'Hello ' },
       { type: 'response.output_text.delta', delta: 'stream.' },
@@ -236,7 +245,7 @@ describe('ChatGPTOAuthLanguageModel', () => {
   });
 
   it('maps tool calls and emits complete V4 tool stream framing', async () => {
-    const requests: Array<{ url: string; body?: ChatGPTRequest }> = [];
+    const requests: CapturedRequest[] = [];
     const fetch = createMockFetch(requests, [
       {
         type: 'response.output_item.added',
@@ -331,11 +340,146 @@ describe('ChatGPTOAuthLanguageModel', () => {
     });
     expect(requests.filter(({ url }) => url.includes('/codex/models'))).toHaveLength(1);
   });
+
+  it('parses SSE events split across transport chunks', async () => {
+    const requests: CapturedRequest[] = [];
+    const fetch = createMockFetch(
+      requests,
+      [
+        { type: 'response.output_text.delta', delta: 'split ' },
+        { type: 'response.output_text.delta', delta: 'stream' },
+        {
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            usage: { input_tokens: 2, output_tokens: 2 },
+          },
+        },
+      ],
+      { fragmentSize: 7 }
+    );
+    const provider = createChatGPTOAuth({
+      credentials: {
+        accessToken: 'test-token',
+        accountId: 'test-account',
+      },
+      fetch,
+    });
+
+    const result = streamText({
+      model: provider('gpt-5.5'),
+      prompt: 'Exercise fragmented transport.',
+    });
+
+    await expect(result.text).resolves.toBe('split stream');
+    await expect(result.finishReason).resolves.toBe('stop');
+  });
+
+  it('retries a rejected model catalog request on the next call', async () => {
+    let catalogCalls = 0;
+    const fetch: typeof globalThis.fetch = async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes('/codex/models')) {
+        catalogCalls += 1;
+        if (catalogCalls === 1) {
+          return new Response(null, {
+            status: 503,
+            statusText: 'Service Unavailable',
+          });
+        }
+        return Response.json({
+          models: [{ slug: 'gpt-5.5', base_instructions: 'Recovered instructions' }],
+        });
+      }
+
+      return createSseResponse([
+        { type: 'response.output_text.delta', delta: 'Recovered.' },
+        {
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+        },
+      ]);
+    };
+    const provider = createChatGPTOAuth({
+      credentials: {
+        accessToken: 'test-token',
+        accountId: 'test-account',
+      },
+      fetch,
+    });
+
+    await expect(
+      generateText({
+        model: provider('gpt-5.5'),
+        prompt: 'First attempt.',
+      })
+    ).rejects.toMatchObject({
+      name: 'ChatGPTOAuthError',
+      code: 'MODEL_CATALOG_ERROR',
+      statusCode: 503,
+    });
+
+    await expect(
+      generateText({
+        model: provider('gpt-5.5'),
+        prompt: 'Second attempt.',
+      })
+    ).resolves.toMatchObject({
+      text: 'Recovered.',
+    });
+    expect(catalogCalls).toBe(2);
+  });
+
+  it('propagates typed backend errors through AI SDK generateText', async () => {
+    const fetch: typeof globalThis.fetch = async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes('/codex/models')) {
+        return Response.json({
+          models: [{ slug: 'gpt-5.5', base_instructions: 'Current instructions' }],
+        });
+      }
+
+      return Response.json(
+        {
+          error: {
+            message: 'Account rate limit reached',
+          },
+        },
+        {
+          status: 429,
+          statusText: 'Too Many Requests',
+        }
+      );
+    };
+    const provider = createChatGPTOAuth({
+      credentials: {
+        accessToken: 'test-token',
+        accountId: 'test-account',
+      },
+      fetch,
+    });
+
+    await expect(
+      generateText({
+        model: provider('gpt-5.5'),
+        prompt: 'Trigger an error.',
+      })
+    ).rejects.toMatchObject({
+      name: 'ChatGPTOAuthError',
+      code: 'API_ERROR',
+      statusCode: 429,
+      message: expect.stringContaining('Account rate limit reached'),
+    });
+  });
 });
 
 function createMockFetch(
-  requests: Array<{ url: string; body?: ChatGPTRequest }>,
-  events: unknown[]
+  requests: CapturedRequest[],
+  events: unknown[],
+  options: { fragmentSize?: number } = {}
 ): typeof globalThis.fetch {
   return async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -354,11 +498,27 @@ function createMockFetch(
       });
     }
 
-    const sse = `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')}data: [DONE]\n\n`;
-    return new Response(sse, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-      },
-    });
+    return createSseResponse(events, options.fragmentSize);
   };
+}
+
+function createSseResponse(events: unknown[], fragmentSize?: number): Response {
+  const source = `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')}data: [DONE]\n\n`;
+  const fragments =
+    fragmentSize === undefined
+      ? [source]
+      : Array.from({ length: Math.ceil(source.length / fragmentSize) }, (_, index) =>
+          source.slice(index * fragmentSize, (index + 1) * fragmentSize)
+        );
+  const body = simulateReadableStream({
+    chunks: fragments,
+    initialDelayInMs: null,
+    chunkDelayInMs: null,
+  }).pipeThrough(new TextEncoderStream());
+
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+    },
+  });
 }

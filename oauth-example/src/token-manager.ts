@@ -45,7 +45,7 @@ export class TokenManager {
       };
 
       this.writeTokens(storedTokens);
-      console.log(`✅ Tokens saved to ${this.storagePath}`);
+      console.log(`Tokens saved to ${this.storagePath}`);
     } catch (error) {
       throw new Error(`Failed to save tokens: ${error}`);
     }
@@ -85,12 +85,12 @@ export class TokenManager {
 
     // Token expired or about to expire, refresh it
     if (!stored.refreshToken) {
-      console.log('⚠️  No refresh token available, please login again');
+      console.log('No refresh token available, please login again');
       return null;
     }
 
     try {
-      console.log('🔄 Refreshing expired token...');
+      console.log('Refreshing expired token...');
       const newTokens = await this.oauthClient.refreshAccessToken(stored.refreshToken);
 
       // Update stored tokens
@@ -103,7 +103,7 @@ export class TokenManager {
       };
 
       this.writeTokens(updatedTokens);
-      console.log('✅ Token refreshed successfully');
+      console.log('Token refreshed successfully');
 
       return newTokens.access_token;
     } catch (error) {
@@ -143,7 +143,7 @@ export class TokenManager {
     if (existsSync(this.storagePath)) {
       try {
         unlinkSync(this.storagePath);
-        console.log('✅ Tokens cleared');
+        console.log('Tokens cleared');
       } catch (error) {
         console.error(`Failed to clear tokens: ${error}`);
       }

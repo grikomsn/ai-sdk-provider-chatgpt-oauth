@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 /**
  * Nested JSON Generation with ChatGPT OAuth
  *
@@ -19,7 +18,7 @@ import { z } from 'zod';
 
 const chatgptOAuth = createChatGPTOAuth();
 
-console.log('🏗️  ChatGPT OAuth: Nested JSON Generation\n');
+console.log('ChatGPT OAuth: Nested JSON Generation\n');
 console.log('='.repeat(60));
 
 // Helper to extract and validate JSON
@@ -41,7 +40,7 @@ async function generateJSON<T>(prompt: string, schema: z.ZodType<T>): Promise<T>
 
 // Example 1: Multi-level nested structure
 async function example1_deepNesting() {
-  console.log('\n1️⃣  Deep Nested Structure\n');
+  console.log('\n1. Deep Nested Structure\n');
 
   const CompanySchema = z.object({
     company: z.object({
@@ -129,15 +128,15 @@ JSON OUTPUT:`;
     const company = await generateJSON(prompt, CompanySchema);
     console.log('Generated company structure:');
     console.log(JSON.stringify(company, null, 2));
-    console.log('✅ Valid nested structure\n');
+    console.log('Valid nested structure\n');
   } catch (e) {
-    console.error('❌ Failed:', e.message, '\n');
+    console.error('Failed:', e.message, '\n');
   }
 }
 
 // Example 2: E-commerce order structure
 async function example2_ecommerceOrder() {
-  console.log('2️⃣  E-commerce Order Structure\n');
+  console.log('2. E-commerce Order Structure\n');
 
   const OrderSchema = z.object({
     orderId: z.string(),
@@ -215,15 +214,15 @@ OUTPUT ONLY JSON:`;
     const order = await generateJSON(prompt, OrderSchema);
     console.log('Generated order:');
     console.log(JSON.stringify(order, null, 2));
-    console.log('✅ Valid order structure\n');
+    console.log('Valid order structure\n');
   } catch (e) {
-    console.error('❌ Failed:', e.message, '\n');
+    console.error('Failed:', e.message, '\n');
   }
 }
 
 // Example 3: Blog post with metadata
 async function example3_blogPost() {
-  console.log('3️⃣  Blog Post with Rich Metadata\n');
+  console.log('3. Blog Post with Rich Metadata\n');
 
   const BlogPostSchema = z.object({
     post: z.object({
@@ -299,15 +298,15 @@ OUTPUT ONLY JSON:`;
     const post = await generateJSON(prompt, BlogPostSchema);
     console.log('Generated blog post:');
     console.log(JSON.stringify(post, null, 2));
-    console.log('✅ Valid blog structure\n');
+    console.log('Valid blog structure\n');
   } catch (e) {
-    console.error('❌ Failed:', e.message, '\n');
+    console.error('Failed:', e.message, '\n');
   }
 }
 
 // Example 4: Configuration file structure
 async function example4_configFile() {
-  console.log('4️⃣  Application Configuration\n');
+  console.log('4. Application Configuration\n');
 
   const ConfigSchema = z.object({
     application: z.object({
@@ -389,17 +388,17 @@ OUTPUT ONLY JSON:`;
     const config = await generateJSON(prompt, ConfigSchema);
     console.log('Generated configuration:');
     console.log(JSON.stringify(config, null, 2));
-    console.log('✅ Valid config structure\n');
+    console.log('Valid config structure\n');
   } catch (e) {
-    console.error('❌ Failed:', e.message, '\n');
+    console.error('Failed:', e.message, '\n');
   }
 }
 
 // Main execution
 async function main() {
   try {
-    console.log('\n🚀 Demonstrating complex nested JSON generation');
-    console.log('   using prompt engineering with ChatGPT OAuth...\n');
+    console.log('\nDemonstrating complex nested JSON generation');
+    console.log('using prompt engineering with ChatGPT OAuth...\n');
 
     await example1_deepNesting();
     await example2_ecommerceOrder();
@@ -407,16 +406,16 @@ async function main() {
     await example4_configFile();
 
     console.log('='.repeat(60));
-    console.log('✅ All nested examples completed successfully!');
-    console.log('\n🎯 Key Insights:');
+    console.log('All nested examples completed successfully!');
+    console.log('\nKey Insights:');
     console.log('- Deep nesting works with clear prompt structure');
     console.log('- Arrays of objects need explicit formatting');
     console.log('- Complex schemas require detailed prompts');
     console.log('- Validation with Zod ensures type safety');
-    console.log("\n💡 Important: While we can't use generateObject,");
-    console.log('   prompt engineering achieves similar results!');
+    console.log("\nImportant: While we can't use generateObject,");
+    console.log('prompt engineering achieves similar results!');
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('Error:', error.message);
     if (error.stack) {
       console.error('\nStack trace:', error.stack);
     }

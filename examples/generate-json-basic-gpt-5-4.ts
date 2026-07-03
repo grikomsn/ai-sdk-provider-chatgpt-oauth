@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 /**
  * Basic JSON Generation with GPT-5 Codex via ChatGPT OAuth
  *
@@ -11,7 +10,7 @@ import { z } from 'zod';
 
 const chatgptOAuth = createChatGPTOAuth();
 
-console.log('🎯 GPT-5 Codex: Basic JSON Generation\n');
+console.log('GPT-5 Codex: Basic JSON Generation\n');
 console.log('='.repeat(60));
 
 function parseJSON(text: string): any {
@@ -24,7 +23,7 @@ function parseJSON(text: string): any {
 }
 
 async function example1_simpleObject() {
-  console.log('\n1️⃣  Simple Object with Primitives\n');
+  console.log('\n1. Simple Object with Primitives\n');
 
   const result = await generateText({
     model: chatgptOAuth('gpt-5.4'),
@@ -53,14 +52,14 @@ JSON OUTPUT:`,
       isActive: z.boolean(),
     });
     schema.parse(profile);
-    console.log('✅ Valid structure\n');
+    console.log('Valid structure\n');
   } catch (e) {
-    console.error('❌ Failed:', (e as Error).message, '\n');
+    console.error('Failed:', (e as Error).message, '\n');
   }
 }
 
 async function example2_arrays() {
-  console.log('2️⃣  Object with Arrays\n');
+  console.log('2. Object with Arrays\n');
 
   const result = await generateText({
     model: chatgptOAuth('gpt-5.4'),
@@ -89,14 +88,14 @@ JSON:`,
       projectCount: z.number(),
     });
     schema.parse(team);
-    console.log('✅ Valid structure\n');
+    console.log('Valid structure\n');
   } catch (e) {
-    console.error('❌ Failed:', (e as Error).message, '\n');
+    console.error('Failed:', (e as Error).message, '\n');
   }
 }
 
 async function example3_optionalFields() {
-  console.log('3️⃣  Object with Optional Fields\n');
+  console.log('3. Object with Optional Fields\n');
 
   const result = await generateText({
     model: chatgptOAuth('gpt-5.4'),
@@ -132,14 +131,14 @@ JSON:`,
       inStock: z.boolean(),
     });
     schema.parse(product);
-    console.log('✅ Valid structure\n');
+    console.log('Valid structure\n');
   } catch (e) {
-    console.error('❌ Failed:', (e as Error).message, '\n');
+    console.error('Failed:', (e as Error).message, '\n');
   }
 }
 
 async function example4_dataTypes() {
-  console.log('4️⃣  Various Data Types\n');
+  console.log('4. Various Data Types\n');
 
   const result = await generateText({
     model: chatgptOAuth('gpt-5.4'),
@@ -176,14 +175,14 @@ JSON ONLY:`,
       website: z.string().url(),
     });
     schema.parse(account);
-    console.log('✅ Valid structure\n');
+    console.log('Valid structure\n');
   } catch (e) {
-    console.error('❌ Failed:', (e as Error).message, '\n');
+    console.error('Failed:', (e as Error).message, '\n');
   }
 }
 
 async function example5_bestPractices() {
-  console.log('5️⃣  Best Practices\n');
+  console.log('5. Best Practices\n');
 
   const result = await generateText({
     model: chatgptOAuth('gpt-5.4'),
@@ -196,7 +195,7 @@ async function example5_bestPractices() {
     console.log('Well-structured generation:');
     console.log(JSON.stringify(article, null, 2));
   } catch (e) {
-    console.error('❌ Failed:', (e as Error).message, '\n');
+    console.error('Failed:', (e as Error).message, '\n');
   }
 }
 
@@ -207,7 +206,7 @@ async function main() {
   await example4_dataTypes();
   await example5_bestPractices();
 
-  console.log('\n✨ Remember to validate and sanitize JSON in production!');
+  console.log('\nRemember to validate and sanitize JSON in production!');
 }
 
 main().catch((error) => {

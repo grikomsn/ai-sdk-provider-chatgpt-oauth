@@ -1,350 +1,109 @@
-# ChatGPT OAuth Example
+# Standalone ChatGPT OAuth Example
 
-A complete, standalone OAuth 2.0 implementation for ChatGPT that works without Codex CLI. This example demonstrates how to implement the full OAuth flow with PKCE, token management, and integration with the `@grikomsn/ai-sdk-provider-chatgpt-oauth` package.
+This directory demonstrates a local OAuth 2.0 PKCE flow without requiring the
+Codex CLI. It is a development reference, not a production authentication
+service.
 
-## 🎯 Purpose
+## Quick Start
 
-This example provides:
-
-- **Full OAuth 2.0 PKCE flow** implementation
-- **Token persistence** and automatic refresh
-- **No dependency on Codex CLI** - completely standalone
-- **Ready-to-use integration** with the AI SDK provider
-- **Production-ready patterns** for your own applications
-
-## 🚀 Quick Start
-
-### 1. Install Dependencies
+From the repository root:
 
 ```bash
+npm run build
 cd oauth-example
-npm install
+npm ci
+CHATGPT_OAUTH_BROWSER=Safari npm run login
+npm test
 ```
 
-### 2. Build the Main Package
+The login command opens the authorization page, validates the callback state,
+exchanges the authorization code, and stores tokens in an ignored local file
+with mode `0600`.
 
-```bash
-# From the oauth-example directory
-cd .. && npm run build && cd oauth-example
-```
-
-### 3. Authenticate
+Available commands:
 
 ```bash
 npm run login
-```
-
-This will:
-
-1. Start a local callback server on port 1455
-2. Open your browser to ChatGPT's OAuth authorization page
-3. After you authorize, capture the callback and exchange it for tokens
-4. Save the tokens locally for future use
-
-To choose Safari explicitly:
-
-```bash
-CHATGPT_OAUTH_BROWSER=Safari npm run login
-```
-
-### 4. Run Examples
-
-```bash
-# Test the integration
-npm run test
-
-# Run the example app
+npm run status
+npm run logout
+npm test
 npm run example
+npm run typecheck
 ```
 
-## 📁 Project Structure
+## How It Works
 
+1. `OAuthClient` creates a PKCE verifier, SHA-256 challenge, and random state.
+2. `OAuthCallbackServer` listens on `localhost:1455`.
+3. The browser completes authorization.
+4. The callback server verifies state and returns the authorization code.
+5. `OAuthClient` exchanges the code for access and refresh tokens.
+6. `TokenManager` stores and refreshes credentials.
+
+The integration test makes live AI SDK calls with the stored credentials. It
+therefore consumes account quota and requires access to the tested models.
+
+## Headless Environments
+
+When a browser cannot open automatically, the CLI offers either:
+
+- Paste the complete callback URL after authorizing in another browser.
+- Run the callback server through SSH port forwarding:
+
+  ```bash
+  ssh -L 1455:localhost:1455 user@server
+  ```
+
+## Configuration
+
+Defaults are suitable for local development. Override them in an ignored `.env`
+file when needed:
+
+```env
+OAUTH_CLIENT_ID=app_EMoamEEZ73f0CkXaXp7hrann
+OAUTH_ISSUER=https://auth.openai.com
+OAUTH_REDIRECT_PORT=1455
+TOKEN_STORAGE_PATH=./oauth-tokens.json
+CHATGPT_OAUTH_BROWSER=Safari
+DEBUG=false
 ```
-oauth-example/
-├── src/
-│   ├── oauth-client.ts      # OAuth 2.0 client with PKCE
-│   ├── oauth-server.ts      # Local callback server
-│   ├── token-manager.ts     # Token storage and refresh
-│   ├── auth-cli.ts         # CLI for login/logout/status
-│   └── example-app.ts      # Example usage with AI SDK
-├── scripts/
-│   └── test.ts             # Integration test script
-├── package.json
-├── tsconfig.json
-└── README.md
-```
 
-## 🔐 How It Works
-
-### OAuth Flow
-
-1. **Authorization Request**: Generate PKCE challenge and state
-2. **Browser Authorization**: User authorizes in ChatGPT web interface
-3. **Callback Capture**: Local server captures the authorization code
-4. **Token Exchange**: Exchange code for access/refresh tokens
-5. **Token Storage**: Save tokens securely for future use
-6. **Automatic Refresh**: Tokens refresh automatically when expired
-
-### PKCE Security
-
-This implementation uses PKCE (Proof Key for Code Exchange) to prevent authorization code interception:
-
-- Generates cryptographically random verifier
-- Creates SHA-256 challenge from verifier
-- Validates state parameter to prevent CSRF attacks
-
-### Token Management
-
-- Tokens stored in `oauth-tokens.json` (configurable)
-- Automatic refresh when tokens expire
-- 5-minute buffer before expiry for proactive refresh
-- Account ID extraction from JWT tokens
-
-## 📘 API Usage
-
-### Using with AI SDK Provider
+## Provider Usage
 
 ```typescript
 import { generateText } from 'ai';
 import { createChatGPTOAuth } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
-import { TokenManager } from './token-manager.js';
+import { TokenManager } from './src/token-manager.js';
 
-// Get OAuth credentials
 const tokenManager = new TokenManager();
 const credentials = await tokenManager.getCredentials();
+const chatgpt = createChatGPTOAuth({ credentials });
 
-// Create provider with OAuth tokens
-const provider = createChatGPTOAuth({
-  credentials,
-  autoRefresh: true,
-});
-
-// Use with AI SDK
 const result = await generateText({
-  model: provider('gpt-5.5'),
-  prompt: 'Hello, OAuth world!',
+  model: chatgpt('gpt-5.5'),
+  prompt: 'Reply with a short greeting.',
 });
+
+console.log(result.text);
 ```
 
-### Direct OAuth Client Usage
-
-```typescript
-import { OAuthClient } from './oauth-client.js';
-import { OAuthCallbackServer } from './oauth-server.js';
-
-// Create client
-const client = new OAuthClient();
-
-// Start OAuth flow
-const authRequest = await client.createAuthorizationRequest();
-
-// Start callback server
-const server = new OAuthCallbackServer();
-const code = await server.waitForCallback(authRequest.state);
-
-// Exchange for tokens
-const tokens = await client.exchangeCodeForTokens(code, authRequest.verifier);
-```
-
-### Token Manager
-
-```typescript
-import { TokenManager } from './token-manager.js';
-
-const manager = new TokenManager();
-
-// Save tokens
-manager.saveTokens(tokenResponse);
-
-// Get valid token (auto-refreshes if needed)
-const token = await manager.getValidToken();
-
-// Check status
-const status = manager.getStatus();
-if (status.isAuthenticated) {
-  console.log(`Expires in: ${status.expiresIn}`);
-}
-
-// Clear tokens (logout)
-manager.clearTokens();
-```
-
-## 🛠️ CLI Commands
-
-### Login
-
-```bash
-npm run login
-# or
-npx tsx src/auth-cli.ts login
-```
-
-The login command automatically detects if you're in a headless/SSH environment and offers two options:
-
-1. **Start local server** - Run a callback server on port 1455
-2. **Paste callback URL** - Manually paste the redirect URL after authorizing
-
-### Logout
-
-```bash
-npm run logout
-# or
-npx tsx src/auth-cli.ts logout
-```
-
-### Check Status
-
-```bash
-npm run status
-# or
-npx tsx src/auth-cli.ts status
-```
-
-## 🖥️ Headless/SSH Support
-
-The OAuth example fully supports headless and SSH environments. When running `npm run login` over SSH or without a display:
-
-### Option 1: Manual URL Paste
-
-1. The CLI will show you the authorization URL
-2. Open the URL in any browser (on any machine)
-3. Complete the authorization
-4. Copy the ENTIRE redirect URL from your browser
-5. Paste it back into the CLI when prompted
-
-### Option 2: Local Server with Port Forwarding
-
-1. Use SSH port forwarding: `ssh -L 1455:localhost:1455 user@server`
-2. The CLI starts a callback server on port 1455
-3. Open the authorization URL in your local browser
-4. The callback will be forwarded through SSH to the server
-
-### Option 3: curl Callback
-
-1. Start the local server option
-2. Complete authorization in any browser
-3. Use curl to send the callback:
-
-```bash
-curl 'http://localhost:1455/auth/callback?code=AUTH_CODE&state=STATE'
-```
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-Create a `.env` file (optional - defaults are provided):
-
-```env
-# OAuth Configuration
-OAUTH_CLIENT_ID=app_EMoamEEZ73f0CkXaXp7hrann
-OAUTH_ISSUER=https://auth.openai.com
-OAUTH_REDIRECT_PORT=1455
-
-# Token Storage
-TOKEN_STORAGE_PATH=./oauth-tokens.json
-
-# Browser application name
-CHATGPT_OAUTH_BROWSER=Safari
-
-# Debug Mode
-DEBUG=false
-```
-
-### Custom Token Storage
-
-```typescript
-// Use custom storage path
-const tokenManager = new TokenManager('/path/to/tokens.json');
-```
-
-## 🔧 Integration Guide
-
-### Adding to Your Project
-
-1. **Copy the OAuth implementation files** to your project:
-   - `oauth-client.ts` - OAuth 2.0 client
-   - `oauth-server.ts` - Callback server
-   - `token-manager.ts` - Token management
-
-2. **Install required dependencies**:
-
-```bash
-npm install open dotenv
-```
-
-3. **Implement authentication flow**:
-
-```typescript
-// See auth-cli.ts for complete example
-const client = new OAuthClient();
-const authRequest = await client.createAuthorizationRequest();
-// ... implement flow
-```
-
-4. **Use with AI SDK provider**:
-
-```typescript
-const credentials = await tokenManager.getCredentials();
-const provider = createChatGPTOAuth({ credentials });
-```
-
-## 🚨 Important Notes
-
-### Security Considerations
-
-- **Never commit tokens**: The `oauth-tokens.json` file contains sensitive credentials
-- **Restrict permissions**: The example writes token files with mode `0600`
-- **Use HTTPS in production**: The callback URL uses localhost for development
-- **Validate state parameter**: Prevents CSRF attacks
-- **Store tokens securely**: Consider encryption for production use
-
-### Token Expiration
-
-- Access-token lifetimes are supplied by the OAuth server
-- Refresh tokens can expire or be revoked
-- Automatic refresh happens when:
-  - Token is expired
-  - Token expires within 5 minutes
-  - `getValidToken()` is called
-
-### Browser Authentication
-
-- Requires a ChatGPT workspace with Codex access
-- Must be logged into ChatGPT in your browser
-- Browser will open automatically during login
-- Callback server runs on `localhost:1455`
-
-## 🐛 Troubleshooting
-
-### "Port already in use"
-
-Another process is using port 1455. Either:
-
-- Stop the other process
-- Change `OAUTH_REDIRECT_PORT` in `.env`
-
-### "State mismatch"
-
-The OAuth flow was interrupted or tampered with. Try logging in again.
-
-### "Token refresh failed"
-
-The refresh token may have expired or been revoked. Run `npm run login` again.
-
-### "Model not supported"
-
-The model must appear in the selected workspace's Codex catalog. On July 3,
-2026, this flow verified `gpt-5.5` and `gpt-5.4`; `gpt-5.4-mini` was also
-listed.
-
-## 📚 Additional Resources
-
-- [OAuth 2.0 RFC](https://tools.ietf.org/html/rfc6749)
-- [PKCE RFC](https://tools.ietf.org/html/rfc7636)
-- [Vercel AI SDK](https://ai-sdk.dev/)
-- [Main Package README](../README.md)
-
-## 📄 License
-
-This example is part of the `@grikomsn/ai-sdk-provider-chatgpt-oauth` package and follows the same license.
+## Security
+
+- Never commit `.env`, `oauth-tokens.json`, Codex credentials, or callback URLs.
+- Treat access and refresh tokens like passwords.
+- Use encrypted platform credential storage in production.
+- Keep state validation and PKCE verification in any derived implementation.
+- Use HTTPS and platform-appropriate callback handling outside localhost.
+- Revoke or replace credentials that may have been exposed.
+
+## Troubleshooting
+
+- **Port already in use:** stop the process using port 1455 or change
+  `OAUTH_REDIRECT_PORT`.
+- **State mismatch:** restart the login flow; do not reuse an old callback URL.
+- **Token refresh failed:** run `npm run login` again.
+- **Model unavailable:** select a model listed for the authenticated workspace.
+
+References: [OAuth 2.0](https://www.rfc-editor.org/rfc/rfc6749),
+[PKCE](https://www.rfc-editor.org/rfc/rfc7636), and
+[AI SDK](https://ai-sdk.dev/).

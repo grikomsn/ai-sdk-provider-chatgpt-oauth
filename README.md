@@ -5,7 +5,9 @@ available to a ChatGPT account through Codex OAuth.
 
 > This community provider uses ChatGPT's Codex backend rather than the public
 > OpenAI API. The endpoint and available models can change without notice.
-> Review [the limitations](./docs/limitations.md) before using it in production.
+> Review the
+> [limitations](https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth/blob/main/docs/limitations.md)
+> before using it in production.
 
 ## Features
 
@@ -33,7 +35,8 @@ codex login
 
 The provider reads `~/.codex/auth.json` by default. It also supports:
 
-- A standalone [PKCE OAuth example](./oauth-example/)
+- A standalone
+  [PKCE OAuth example](https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth/tree/main/oauth-example)
 - `CHATGPT_OAUTH_ACCESS_TOKEN`, `CHATGPT_OAUTH_ACCOUNT_ID`, and optional
   `CHATGPT_OAUTH_REFRESH_TOKEN` environment variables
 - Direct `credentials`
@@ -117,7 +120,8 @@ const model = chatgpt('gpt-5.5', {
 });
 ```
 
-See [reasoning options](./docs/reasoning.md).
+See the
+[reasoning options](https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth/blob/main/docs/reasoning.md).
 
 ## Tools
 
@@ -145,7 +149,7 @@ const result = await generateText({
 ```
 
 Only execute model-provided commands inside an appropriate sandbox. See
-[tool calling](./docs/tool-calling.md).
+[tool calling](https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth/blob/main/docs/tool-calling.md).
 
 ## Models
 
@@ -186,8 +190,11 @@ settings. The provider emits AI SDK warnings for `temperature`, `topP`, and
 `maxOutputTokens`. Structured output APIs are not supported; use text generation,
 parse the result, and validate it in application code.
 
-See [limitations](./docs/limitations.md) and
-[JSON formatting](./docs/json-formatting.md).
+See the
+[limitations](https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth/blob/main/docs/limitations.md)
+and
+[JSON formatting](https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth/blob/main/docs/json-formatting.md)
+guides.
 
 ## Errors
 
@@ -209,13 +216,14 @@ try {
 ## Development
 
 ```bash
-npm install
+npm ci
 npm run check
+npm run test:coverage
 ```
 
 `npm run check` verifies formatting, lint, library and example typechecking,
-unit/integration tests, and the package build. Live OAuth verification is in
-`oauth-example`:
+deterministic unit/integration tests, the package build, and the exact tarball
+contents. Live OAuth verification is separate:
 
 ```bash
 cd oauth-example
@@ -228,6 +236,9 @@ Changesets manages versions and changelog entries. Add a changeset with
 `npm run changeset` in every pull request that changes the published package.
 Merging the automated release pull request publishes through npm trusted
 publishing; the workflow stores no npm token.
+
+Report security issues privately as described in
+[SECURITY.md](https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth/security/policy).
 
 ## Ownership
 

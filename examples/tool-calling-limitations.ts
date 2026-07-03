@@ -10,7 +10,7 @@ import { z } from 'zod';
  */
 
 async function main() {
-  console.log('⚠️  Tool Limitations Example\n');
+  console.log('Tool Limitations Example\n');
   console.log('='.repeat(50));
 
   const provider = createChatGPTOAuth();
@@ -19,7 +19,7 @@ async function main() {
     model: provider('gpt-5.5'),
     prompt: 'Please get the weather and also list files',
     tools: {
-      // ✅ SUPPORTED: bash tool (maps to "shell" internally)
+      //  SUPPORTED: bash tool (maps to "shell" internally)
       bash: tool({
         description: 'Execute bash commands',
         inputSchema: z.object({
@@ -28,7 +28,7 @@ async function main() {
         execute: async () => 'Files: example1.ts, example2.ts',
       }),
 
-      // ❌ NOT SUPPORTED: Custom weather tool
+      //  NOT SUPPORTED: Custom weather tool
       getWeather: tool({
         description: 'Get weather for a location',
         inputSchema: z.object({
@@ -37,7 +37,7 @@ async function main() {
         execute: async () => '72°F and sunny',
       }),
 
-      // ❌ NOT SUPPORTED: Custom database tool
+      //  NOT SUPPORTED: Custom database tool
       queryDatabase: tool({
         description: 'Query a database',
         inputSchema: z.object({
@@ -48,32 +48,32 @@ async function main() {
     },
   });
 
-  console.log(`\n💬 Model's Response: "${result.text}"`);
+  console.log(`\nModel's Response: "${result.text}"`);
 
-  console.log('\n⚠️  Warnings Generated:');
+  console.log('\nWarnings Generated:');
   if (result.warnings && result.warnings.length > 0) {
     result.warnings.forEach((warning, i) => {
-      console.log(`   ${i + 1}. ${JSON.stringify(warning)}`);
+      console.log(`${i + 1}. ${JSON.stringify(warning)}`);
     });
   } else {
-    console.log('   (No warnings)');
+    console.log('(No warnings)');
   }
 
-  console.log('\n📊 Tool Support Summary:');
-  console.log('   ✅ Supported Tools:');
-  console.log('      • "bash" - Executes shell commands');
-  console.log('      • "TodoWrite" - Updates task lists');
-  console.log('   ');
-  console.log('   ❌ Not Supported:');
-  console.log('      • Custom API tools (weather, database, etc.)');
-  console.log('      • File manipulation tools');
-  console.log('      • Web scraping tools');
-  console.log('      • Any tool other than bash/TodoWrite');
+  console.log('\nTool Support Summary:');
+  console.log('Supported Tools:');
+  console.log('- "bash" - Executes shell commands');
+  console.log('- "TodoWrite" - Updates task lists');
+  console.log('');
+  console.log('Not Supported:');
+  console.log('- Custom API tools (weather, database, etc.)');
+  console.log('- File manipulation tools');
+  console.log('- Web scraping tools');
+  console.log('- Any tool other than bash/TodoWrite');
 
-  console.log('\n💡 Why this limitation?');
-  console.log('   The ChatGPT OAuth backend uses the Codex CLI pattern.');
-  console.log('   It only supports predefined Codex tools (shell and update_plan).');
-  console.log('   All other tools are ignored with warnings.');
+  console.log('\nWhy this limitation?');
+  console.log('The ChatGPT OAuth backend uses the Codex CLI pattern.');
+  console.log('It only supports predefined Codex tools (shell and update_plan).');
+  console.log('All other tools are ignored with warnings.');
 
   console.log('\n' + '='.repeat(50));
 }

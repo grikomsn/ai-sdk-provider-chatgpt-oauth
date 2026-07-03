@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 /**
  * Advanced JSON Generation Patterns with ChatGPT OAuth
  *
@@ -19,7 +18,7 @@ import { z } from 'zod';
 
 const chatgptOAuth = createChatGPTOAuth();
 
-console.log('🚀 ChatGPT OAuth: Advanced JSON Generation Patterns\n');
+console.log('ChatGPT OAuth: Advanced JSON Generation Patterns\n');
 console.log('='.repeat(60));
 
 // Robust JSON extraction with multiple strategies
@@ -75,7 +74,7 @@ async function generateWithRetry<T>(
       const json = extractJSON(result.text);
       return schema.parse(json);
     } catch (error) {
-      console.log(`  Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
+      console.log(`Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
 
       if (attempt === maxRetries) {
         throw new Error(`Failed after ${maxRetries} attempts: ${error.message}`);
@@ -83,7 +82,7 @@ async function generateWithRetry<T>(
 
       if (backoff) {
         const delay = Math.pow(2, attempt - 1) * 1000;
-        console.log(`  Waiting ${delay}ms before retry...`);
+        console.log(`Waiting ${delay}ms before retry...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -94,7 +93,7 @@ async function generateWithRetry<T>(
 
 // Example 1: Data extraction from unstructured text
 async function example1_dataExtraction() {
-  console.log('\n1️⃣  Extract Structured Data from Text\n');
+  console.log('\n1. Extract Structured Data from Text\n');
 
   const emailText = `
     Subject: Q4 Project Update - Critical Issues
@@ -189,15 +188,15 @@ IMPORTANT: Extract exact values from the email. Output only JSON:`;
     const extracted = await generateWithRetry(prompt, ExtractionSchema);
     console.log('Extracted data:');
     console.log(JSON.stringify(extracted, null, 2));
-    console.log('✅ Successfully extracted structured data\n');
+    console.log('Successfully extracted structured data\n');
   } catch (e) {
-    console.error('❌ Extraction failed:', e.message, '\n');
+    console.error('Extraction failed:', e.message, '\n');
   }
 }
 
 // Example 2: API response generation with constraints
 async function example2_apiResponse() {
-  console.log('2️⃣  Generate API Response with Business Logic\n');
+  console.log('2. Generate API Response with Business Logic\n');
 
   const ApiResponseSchema = z.object({
     status: z.literal('success'),
@@ -314,15 +313,15 @@ EXACT JSON STRUCTURE (NO DEVIATIONS):
     const response = await generateWithRetry('', ApiResponseSchema, { enhancePrompt });
     console.log('Generated API response:');
     console.log(JSON.stringify(response, null, 2));
-    console.log('✅ Valid API response with constraints\n');
+    console.log('Valid API response with constraints\n');
   } catch (e) {
-    console.error('❌ Generation failed:', e.message, '\n');
+    console.error('Generation failed:', e.message, '\n');
   }
 }
 
 // Example 3: Batch processing with validation
 async function example3_batchProcessing() {
-  console.log('3️⃣  Batch Processing with Parallel Generation\n');
+  console.log('3. Batch Processing with Parallel Generation\n');
 
   const ProductSchema = z.object({
     name: z.string(),
@@ -367,10 +366,10 @@ ONLY JSON OUTPUT:`;
           maxRetries: 2,
           backoff: false,
         });
-        console.log(`✅ Processed ${index + 1}/${products.length}: ${result.name}`);
+        console.log(`Processed ${index + 1}/${products.length}: ${result.name}`);
         return { success: true, data: result };
       } catch (error) {
-        console.log(`❌ Failed ${index + 1}/${products.length}: ${product}`);
+        console.log(`Failed ${index + 1}/${products.length}: ${product}`);
         return { success: false, error: error.message };
       }
     })
@@ -384,7 +383,7 @@ ONLY JSON OUTPUT:`;
 
 // Example 4: Schema-driven form generation
 async function example4_dynamicForms() {
-  console.log('4️⃣  Dynamic Form Generation from Requirements\n');
+  console.log('4. Dynamic Form Generation from Requirements\n');
 
   const FormSchema = z.object({
     form: z.object({
@@ -491,15 +490,15 @@ OUTPUT ONLY JSON:`;
     const form = await generateWithRetry(prompt, FormSchema);
     console.log('Generated form configuration:');
     console.log(JSON.stringify(form, null, 2));
-    console.log('✅ Dynamic form generated from requirements\n');
+    console.log('Dynamic form generated from requirements\n');
   } catch (e) {
-    console.error('❌ Form generation failed:', e.message, '\n');
+    console.error('Form generation failed:', e.message, '\n');
   }
 }
 
 // Example 5: Performance monitoring
 async function example5_performanceTracking() {
-  console.log('5️⃣  Performance Tracking\n');
+  console.log('5. Performance Tracking\n');
 
   const MetricsSchema = z.object({
     endpoint: z.string(),
@@ -546,9 +545,9 @@ JSON ONLY:`;
       });
       const elapsed = Date.now() - metricStart;
       metrics.push({ ...metric, generationTime: elapsed });
-      console.log(`  ✓ ${endpoint}: ${elapsed}ms`);
+      console.log(`OK ${endpoint}: ${elapsed}ms`);
     } catch (e) {
-      console.log(`  ✗ ${endpoint}: failed`);
+      console.log(`FAIL ${endpoint}: failed`);
     }
   }
 
@@ -562,7 +561,7 @@ JSON ONLY:`;
 // Main execution
 async function main() {
   try {
-    console.log('\n🎯 Advanced patterns for production JSON generation\n');
+    console.log('\nAdvanced patterns for production JSON generation\n');
 
     await example1_dataExtraction();
     await example2_apiResponse();
@@ -571,19 +570,19 @@ async function main() {
     await example5_performanceTracking();
 
     console.log('='.repeat(60));
-    console.log('✅ All advanced examples completed!');
-    console.log('\n🏆 Key Takeaways:');
+    console.log('All advanced examples completed!');
+    console.log('\nKey Takeaways:');
     console.log('- Retry logic improves reliability');
     console.log('- Progressive prompt enhancement helps difficult cases');
     console.log('- Batch processing with Promise.all improves performance');
     console.log('- Schema validation ensures type safety');
     console.log('- Performance tracking helps optimize prompts');
-    console.log('\n💎 Production tips:');
+    console.log('\nProduction tips:');
     console.log('- Cache successful prompts for similar requests');
     console.log('- Use smaller models for simple JSON tasks');
     console.log('- Implement circuit breakers for high-volume scenarios');
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('Error:', error.message);
     if (error.stack) {
       console.error('\nStack trace:', error.stack);
     }

@@ -30,8 +30,8 @@ async function testReasoningEffort() {
   ] as const;
 
   for (const { effort, prompt } of testCases) {
-    console.log(`\n🧠 Reasoning Effort: ${effort.toUpperCase()}`);
-    console.log('─'.repeat(50));
+    console.log(`\nReasoning Effort: ${effort.toUpperCase()}`);
+    console.log('-'.repeat(50));
     console.log(`Prompt: ${prompt}`);
     console.log('');
 
@@ -46,9 +46,9 @@ async function testReasoningEffort() {
 
       if (result.usage) {
         console.log(`\nToken usage:`);
-        console.log(`  Input: ${result.usage.inputTokens}`);
-        console.log(`  Output: ${result.usage.outputTokens}`);
-        console.log(`  Total: ${result.usage.totalTokens}`);
+        console.log(`Input: ${result.usage.inputTokens}`);
+        console.log(`Output: ${result.usage.outputTokens}`);
+        console.log(`Total: ${result.usage.totalTokens}`);
 
         // Note: reasoning tokens are included in the output tokens
         // The backend may provide separate reasoning token counts in future
@@ -82,10 +82,10 @@ async function testReasoningEffort() {
 
   console.log('\n' + '='.repeat(60));
   console.log('Notes:');
-  console.log('  • Current catalog advertises low, medium, high, and xhigh');
-  console.log('  • AI SDK 7 call-level reasoning overrides provider defaults');
-  console.log('  • Higher effort levels may increase response time and token usage');
-  console.log('  • Similar to: codex -m gpt-5.5 -c model_reasoning_effort="high"');
+  console.log('- Current catalog advertises low, medium, high, and xhigh');
+  console.log('- AI SDK 7 call-level reasoning overrides provider defaults');
+  console.log('- Higher effort levels may increase response time and token usage');
+  console.log('- Similar to: codex -m gpt-5.5 -c model_reasoning_effort="high"');
   console.log('='.repeat(60));
 }
 

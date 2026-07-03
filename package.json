@@ -41,9 +41,10 @@
     }
   },
   "files": [
-    "dist/**/*",
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/*.txt",
     "README.md",
-    "docs/**/*",
     "LICENSE"
   ],
   "scripts": {
@@ -58,7 +59,9 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc --project tsconfig.examples.json",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run typecheck:examples && npm run test && npm run build",
+    "docs:check": "node scripts/check-docs.mjs",
+    "pack:check": "node scripts/check-package.mjs",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run typecheck:examples && npm run docs:check && npm run test:coverage && npm run build && npm run pack:check",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "npm run check && changeset publish",
@@ -75,32 +78,32 @@
     "example:object-5-4": "npm run build && npx tsx examples/generate-json-basic-gpt-5-4.ts"
   },
   "dependencies": {
-    "@ai-sdk/provider": "4.0.2",
-    "@ai-sdk/provider-utils": "5.0.5"
+    "@ai-sdk/provider": "^4.0.2",
+    "@ai-sdk/provider-utils": "^5.0.5"
   },
   "devDependencies": {
-    "@changesets/cli": "2.31.0",
-    "@eslint/js": "10.0.1",
-    "@types/node": "26.1.0",
-    "@typescript-eslint/eslint-plugin": "8.62.1",
-    "@typescript-eslint/parser": "8.62.1",
-    "@vitest/coverage-v8": "4.1.9",
-    "ai": "7.0.14",
-    "eslint": "10.6.0",
-    "globals": "17.7.0",
-    "prettier": "3.9.4",
-    "tsup": "8.5.1",
-    "tsx": "4.22.5",
-    "typescript": "6.0.3",
-    "vitest": "4.1.9",
-    "zod": "4.4.3"
+    "@changesets/cli": "^2.31.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.1.0",
+    "@typescript-eslint/eslint-plugin": "^8.62.1",
+    "@typescript-eslint/parser": "^8.62.1",
+    "@vitest/coverage-v8": "^4.1.9",
+    "ai": "^7.0.14",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.4",
+    "tsup": "^8.5.1",
+    "tsx": "^4.22.5",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "zod": "^3.25.76 || ^4.1.8"
   },
   "overrides": {
     "tsup": {
-      "esbuild": "0.28.1"
+      "esbuild": "^0.28.1"
     }
   },
   "engines": {

@@ -1,6 +1,7 @@
 {
   "name": "chatgpt-oauth-example",
   "version": "2.0.0",
+  "private": true,
   "description": "Example OAuth implementation for ChatGPT without Codex CLI",
   "type": "module",
   "scripts": {
@@ -14,14 +15,14 @@
   },
   "dependencies": {
     "@grikomsn/ai-sdk-provider-chatgpt-oauth": "file:..",
-    "ai": "7.0.14",
-    "dotenv": "17.4.2",
-    "open": "11.0.0"
+    "ai": "^7.0.14",
+    "dotenv": "^17.4.2",
+    "open": "^11.0.0"
   },
   "devDependencies": {
-    "@types/node": "26.1.0",
-    "tsx": "4.22.5",
-    "typescript": "6.0.3"
+    "@types/node": "^26.1.0",
+    "tsx": "^4.22.5",
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=22"

@@ -66,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Tool calling compatibility issues
 
-## [1.0.0-beta.1] - 2025-08-12
+## 1.0.0-beta.1 - 2025-08-12
 
 ### Added
 
@@ -76,5 +76,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [1.0.0]: https://github.com/ben-vargas/ai-sdk-provider-chatgpt-oauth/releases/tag/v1.0.0
 [1.0.0-beta.2]: https://github.com/ben-vargas/ai-sdk-provider-chatgpt-oauth/releases/tag/v1.0.0-beta.2
-[1.0.0-beta.1]: https://github.com/ben-vargas/ai-sdk-provider-chatgpt-oauth/releases/tag/v1.0.0-beta.1
 [2.0.0]: https://github.com/grikomsn/ai-sdk-provider-chatgpt-oauth/releases/tag/v2.0.0

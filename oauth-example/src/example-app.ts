@@ -7,8 +7,8 @@ import { config } from 'dotenv';
 config();
 
 async function main() {
-  console.log('\n🤖 ChatGPT OAuth Example App\n');
-  console.log('━'.repeat(50));
+  console.log('\nChatGPT OAuth Example App\n');
+  console.log('-'.repeat(50));
 
   // Initialize token manager
   const tokenManager = new TokenManager();
@@ -16,14 +16,14 @@ async function main() {
   // Check authentication
   const status = tokenManager.getStatus();
   if (!status?.isAuthenticated) {
-    console.log('❌ Not authenticated!\n');
+    console.log('Not authenticated!\n');
     console.log('Please run "npm run login" first to authenticate.\n');
     process.exit(1);
   }
 
-  console.log('✅ Authenticated');
-  console.log(`   Account: ${status.accountId}`);
-  console.log(`   Expires in: ${status.expiresIn}\n`);
+  console.log('Authenticated');
+  console.log(`Account: ${status.accountId}`);
+  console.log(`Expires in: ${status.expiresIn}\n`);
 
   try {
     // Get fresh credentials (will auto-refresh if needed)
@@ -37,8 +37,8 @@ async function main() {
       credentials,
     });
 
-    console.log('━'.repeat(50));
-    console.log('\n📝 Example 1: Basic Text Generation\n');
+    console.log('-'.repeat(50));
+    console.log('\nExample 1: Basic Text Generation\n');
 
     const result1 = await generateText({
       model: provider('gpt-5.5'),
@@ -46,10 +46,10 @@ async function main() {
     });
 
     console.log('Response:', result1.text);
-    console.log(`\n📊 Usage: ${result1.usage?.totalTokens} tokens`);
+    console.log(`\nUsage: ${result1.usage?.totalTokens} tokens`);
 
-    console.log('\n' + '━'.repeat(50));
-    console.log('\n🔄 Example 2: Streaming Response\n');
+    console.log('\n' + '-'.repeat(50));
+    console.log('\nExample 2: Streaming Response\n');
 
     const stream = await streamText({
       model: provider('gpt-5.5'),
@@ -62,8 +62,8 @@ async function main() {
     }
     console.log('\n');
 
-    console.log('━'.repeat(50));
-    console.log('\n🧠 Example 3: Using Reasoning (if supported)\n');
+    console.log('-'.repeat(50));
+    console.log('\nExample 3: Using Reasoning (if supported)\n');
 
     const result3 = await generateText({
       model: provider('gpt-5.5', {
@@ -73,10 +73,10 @@ async function main() {
     });
 
     console.log('Response:', result3.text);
-    console.log(`\n📊 Usage: ${result3.usage?.totalTokens} tokens`);
+    console.log(`\nUsage: ${result3.usage?.totalTokens} tokens`);
 
-    console.log('\n' + '━'.repeat(50));
-    console.log('\n💬 Example 4: Multi-turn Conversation\n');
+    console.log('\n' + '-'.repeat(50));
+    console.log('\nExample 4: Multi-turn Conversation\n');
 
     const result4 = await generateText({
       model: provider('gpt-5.5'),
@@ -93,25 +93,25 @@ async function main() {
     });
 
     console.log('Response:', result4.text);
-    console.log(`\n📊 Usage: ${result4.usage?.totalTokens} tokens`);
+    console.log(`\nUsage: ${result4.usage?.totalTokens} tokens`);
 
-    console.log('\n' + '━'.repeat(50));
-    console.log('\n✅ All examples completed successfully!\n');
+    console.log('\n' + '-'.repeat(50));
+    console.log('\nAll examples completed successfully!\n');
 
     // Update credentials if they were refreshed
     const updatedCreds = await tokenManager.getCredentials();
     if (updatedCreds && updatedCreds.accessToken !== credentials.accessToken) {
-      console.log('ℹ️  Note: Token was automatically refreshed during execution.\n');
+      console.log('Note: Token was automatically refreshed during execution.\n');
     }
   } catch (error) {
-    console.error('\n❌ Error:', error);
+    console.error('\nError:', error);
 
     if (error instanceof Error) {
       if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-        console.log('\n💡 Tip: Your token may have expired. Try running "npm run login" again.\n');
+        console.log('\nTip: Your token may have expired. Try running "npm run login" again.\n');
       } else if (error.message.includes('Model not supported')) {
         console.log(
-          '\n💡 Tip: The model may not be available. Try "gpt-5.5", "gpt-5.4", or "gpt-5.4-mini".\n'
+          '\nTip: The model may not be available. Try "gpt-5.5", "gpt-5.4", or "gpt-5.4-mini".\n'
         );
       }
     }

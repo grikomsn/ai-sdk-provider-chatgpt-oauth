@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { OAuthClient } from './oauth-client.js';
 import { OAuthCallbackServer } from './oauth-server.js';
 import { TokenManager } from './token-manager.js';
@@ -37,7 +35,7 @@ async function select(
   console.log(`\n${question}`);
   options.forEach((opt, i) => {
     const hint = opt.hint ? ` (${opt.hint})` : '';
-    console.log(`  ${i + 1}. ${opt.label}${hint}`);
+    console.log(`${i + 1}. ${opt.label}${hint}`);
   });
 
   const rl = createPrompt();
@@ -63,7 +61,7 @@ function isHeadless(): boolean {
 }
 
 async function login() {
-  console.log('🚀 Starting ChatGPT OAuth login flow...\n');
+  console.log('Starting ChatGPT OAuth login flow...\n');
 
   const client = new OAuthClient();
   const tokenManager = new TokenManager();
@@ -72,17 +70,17 @@ async function login() {
     // Check if already authenticated
     const existingStatus = tokenManager.getStatus();
     if (existingStatus?.isAuthenticated) {
-      console.log(`⚠️  Already authenticated (expires in ${existingStatus.expiresIn})`);
-      console.log(`   Account ID: ${existingStatus.accountId}`);
-      console.log('\n   Run "npm run logout" to clear tokens and login again.\n');
+      console.log(`Already authenticated (expires in ${existingStatus.expiresIn})`);
+      console.log(`Account ID: ${existingStatus.accountId}`);
+      console.log('\nRun "npm run logout" to clear tokens and login again.\n');
       return;
     }
 
     // Create authorization request
     const authRequest = await client.createAuthorizationRequest();
-    console.log(`📋 State: ${authRequest.state}`);
-    console.log(`🔑 PKCE Verifier: ${authRequest.verifier.substring(0, 8)}...`);
-    console.log(`🌐 Authorization URL generated\n`);
+    console.log(`State: ${authRequest.state}`);
+    console.log(`PKCE Verifier: ${authRequest.verifier.substring(0, 8)}...`);
+    console.log(`Authorization URL generated\n`);
 
     // Detect if we're in a headless environment
     const headless = isHeadless();
@@ -90,7 +88,7 @@ async function login() {
 
     if (!headless) {
       // Try to open browser
-      console.log('🌐 Opening browser for authorization...');
+      console.log('Opening browser for authorization...');
       try {
         const browser = process.env.CHATGPT_OAUTH_BROWSER;
         await open(
@@ -104,20 +102,20 @@ async function login() {
             : undefined
         );
         browserOpened = true;
-        console.log('✅ Browser opened successfully\n');
+        console.log('Browser opened successfully\n');
       } catch (error) {
-        console.log('⚠️  Failed to open browser automatically\n');
+        console.log('Failed to open browser automatically\n');
       }
     } else {
-      console.log('🖥️  Detected headless/SSH environment\n');
+      console.log('Detected headless/SSH environment\n');
     }
 
     // If browser didn't open, show URL and offer options
     if (!browserOpened) {
-      console.log('📋 Please open this URL in your browser:');
-      console.log('━'.repeat(50));
+      console.log('Please open this URL in your browser:');
+      console.log('-'.repeat(50));
       console.log(authRequest.url);
-      console.log('━'.repeat(50));
+      console.log('-'.repeat(50));
       console.log();
 
       // Offer choice between server callback or manual paste
@@ -136,11 +134,11 @@ async function login() {
 
       if (callbackMethod === 'manual') {
         // Manual URL paste method
-        console.log('\n📋 Instructions:');
+        console.log('\nInstructions:');
         console.log('1. Complete authorization in your browser');
         console.log('2. When redirected, copy the ENTIRE URL from your browser');
         console.log('3. The URL should look like:');
-        console.log(`   http://localhost:${authRequest.port}/auth/callback?code=...&state=...\n`);
+        console.log(`http://localhost:${authRequest.port}/auth/callback?code=...&state=...\n`);
 
         const rl = createPrompt();
         const callbackUrl = await ask(rl, 'Paste the full callback URL here: ');
@@ -154,21 +152,21 @@ async function login() {
 
           // Validate state
           if (returnedState !== authRequest.state) {
-            console.error('\n❌ State mismatch - possible security issue');
-            console.error('   Please try logging in again.');
+            console.error('\nState mismatch - possible security issue');
+            console.error('Please try logging in again.');
             process.exit(1);
           }
 
           if (!code) {
-            console.error('\n❌ No authorization code found in URL');
-            console.error('   Make sure you copied the complete URL.');
+            console.error('\nNo authorization code found in URL');
+            console.error('Make sure you copied the complete URL.');
             process.exit(1);
           }
 
-          console.log('\n✅ Authorization code received!');
+          console.log('\nAuthorization code received!');
 
           // Exchange code for tokens
-          console.log('🔄 Exchanging code for tokens...');
+          console.log('Exchanging code for tokens...');
           const tokens = await client.exchangeCodeForTokens(code, authRequest.verifier);
 
           // Save tokens
@@ -178,14 +176,14 @@ async function login() {
           const accountId = client.extractAccountId(tokens.access_token);
           const expiresIn = Math.floor(tokens.expires_in / 3600);
 
-          console.log('\n🎉 Login successful!');
-          console.log(`   Account ID: ${accountId}`);
-          console.log(`   Token expires in: ${expiresIn} hours`);
-          console.log(`   Refresh token: ${tokens.refresh_token ? 'Yes' : 'No'}`);
-          console.log('\n✅ You can now use the ChatGPT OAuth provider!\n');
+          console.log('\nLogin successful!');
+          console.log(`Account ID: ${accountId}`);
+          console.log(`Token expires in: ${expiresIn} hours`);
+          console.log(`Refresh token: ${tokens.refresh_token ? 'Yes' : 'No'}`);
+          console.log('\nYou can now use the ChatGPT OAuth provider!\n');
         } catch (error) {
-          console.error('\n❌ Failed to process callback URL:', error);
-          console.error('   Please make sure you copied the complete URL.');
+          console.error('\nFailed to process callback URL:', error);
+          console.error('Please make sure you copied the complete URL.');
           process.exit(1);
         }
 
@@ -193,13 +191,13 @@ async function login() {
       }
 
       // Server callback method
-      console.log(`\n🔐 Starting callback server on port ${authRequest.port}...`);
-      console.log(`   Callback URL: http://localhost:${authRequest.port}/auth/callback`);
+      console.log(`\nStarting callback server on port ${authRequest.port}...`);
+      console.log(`Callback URL: http://localhost:${authRequest.port}/auth/callback`);
 
       if (headless) {
-        console.log('\n💡 Tips for headless/SSH environments:');
-        console.log('   - Use SSH port forwarding: ssh -L 1455:localhost:1455 user@server');
-        console.log('   - Or use curl after authorizing:');
+        console.log('\nTips for headless/SSH environments:');
+        console.log('- Use SSH port forwarding: ssh -L 1455:localhost:1455 user@server');
+        console.log('- Or use curl after authorizing:');
         console.log(
           `     curl 'http://localhost:${authRequest.port}/auth/callback?code=CODE&state=${authRequest.state}'`
         );
@@ -208,13 +206,13 @@ async function login() {
 
     // Start callback server unless manual mode was selected above.
     const server = new OAuthCallbackServer(authRequest.port);
-    console.log('\n⏳ Waiting for authorization callback...');
-    console.log('   (This will timeout in 5 minutes)\n');
+    console.log('\nWaiting for authorization callback...');
+    console.log('(This will timeout in 5 minutes)\n');
 
     const code = await server.waitForCallback(authRequest.state, 300000);
-    console.log('\n✅ Authorization code received!');
+    console.log('\nAuthorization code received!');
 
-    console.log('🔄 Exchanging code for tokens...');
+    console.log('Exchanging code for tokens...');
     const tokens = await client.exchangeCodeForTokens(code, authRequest.verifier);
 
     tokenManager.saveTokens(tokens);
@@ -222,13 +220,13 @@ async function login() {
     const accountId = client.extractAccountId(tokens.access_token);
     const expiresIn = Math.floor(tokens.expires_in / 3600);
 
-    console.log('\n🎉 Login successful!');
-    console.log(`   Account ID: ${accountId}`);
-    console.log(`   Token expires in: ${expiresIn} hours`);
-    console.log(`   Refresh token: ${tokens.refresh_token ? 'Yes' : 'No'}`);
-    console.log('\n✅ You can now use the ChatGPT OAuth provider!\n');
+    console.log('\nLogin successful!');
+    console.log(`Account ID: ${accountId}`);
+    console.log(`Token expires in: ${expiresIn} hours`);
+    console.log(`Refresh token: ${tokens.refresh_token ? 'Yes' : 'No'}`);
+    console.log('\nYou can now use the ChatGPT OAuth provider!\n');
   } catch (error) {
-    console.error('\n❌ Login failed:', error);
+    console.error('\nLogin failed:', error);
     process.exit(1);
   }
 }
@@ -238,14 +236,14 @@ async function logout() {
   const status = tokenManager.getStatus();
 
   if (!status?.isAuthenticated && !status?.accountId) {
-    console.log('⚠️  No active session found.\n');
+    console.log('No active session found.\n');
     return;
   }
 
   tokenManager.clearTokens();
-  console.log('🚪 Logged out successfully!\n');
+  console.log('Logged out successfully!\n');
   if (status.accountId) {
-    console.log(`   Previous account: ${status.accountId}\n`);
+    console.log(`Previous account: ${status.accountId}\n`);
   }
 }
 
@@ -253,41 +251,41 @@ async function checkStatus() {
   const tokenManager = new TokenManager();
   const status = tokenManager.getStatus();
 
-  console.log('📊 Authentication Status\n');
-  console.log('━'.repeat(40));
+  console.log('Authentication Status\n');
+  console.log('-'.repeat(40));
 
   if (!status) {
-    console.log('❌ No tokens found');
+    console.log('No tokens found');
     console.log('\nRun "npm run login" to authenticate.\n');
     return;
   }
 
   if (status.isAuthenticated) {
-    console.log('✅ Authenticated');
-    console.log(`   Account ID: ${status.accountId || 'Unknown'}`);
-    console.log(`   Expires in: ${status.expiresIn}`);
+    console.log('Authenticated');
+    console.log(`Account ID: ${status.accountId || 'Unknown'}`);
+    console.log(`Expires in: ${status.expiresIn}`);
 
     // Test if we can get valid credentials
     const creds = await tokenManager.getCredentials();
     if (creds) {
-      console.log('   Token status: Valid and ready');
+      console.log('Token status: Valid and ready');
     } else {
-      console.log('   Token status: Needs refresh');
+      console.log('Token status: Needs refresh');
     }
   } else {
-    console.log('❌ Not authenticated');
+    console.log('Not authenticated');
     if (status.accountId) {
-      console.log(`   Previous account: ${status.accountId}`);
+      console.log(`Previous account: ${status.accountId}`);
     }
     console.log('\nRun "npm run login" to authenticate.');
   }
 
-  console.log('━'.repeat(40));
+  console.log('-'.repeat(40));
   console.log();
 }
 
 async function main() {
-  console.log('\n🔐 ChatGPT OAuth CLI\n');
+  console.log('\nChatGPT OAuth CLI\n');
 
   switch (command) {
     case 'login':
@@ -305,13 +303,13 @@ async function main() {
     default:
       console.log('Usage: auth-cli.ts <command>\n');
       console.log('Commands:');
-      console.log('  login   - Start OAuth login flow');
-      console.log('  logout  - Clear stored tokens');
-      console.log('  status  - Check authentication status\n');
+      console.log('login   - Start OAuth login flow');
+      console.log('logout  - Clear stored tokens');
+      console.log('status  - Check authentication status\n');
       console.log('Or use npm scripts:');
-      console.log('  npm run login');
-      console.log('  npm run logout');
-      console.log('  npm run status\n');
+      console.log('npm run login');
+      console.log('npm run logout');
+      console.log('npm run status\n');
       process.exit(1);
   }
 }

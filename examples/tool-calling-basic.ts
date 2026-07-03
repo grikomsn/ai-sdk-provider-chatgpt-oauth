@@ -11,7 +11,7 @@ import { z } from 'zod';
  */
 
 async function main() {
-  console.log('🔧 Basic Tool Calling Example\n');
+  console.log('Basic Tool Calling Example\n');
   console.log('='.repeat(50));
 
   const provider = createChatGPTOAuth();
@@ -35,8 +35,8 @@ async function main() {
             cmd = command;
           }
 
-          console.log(`\n📟 Tool Called: bash`);
-          console.log(`   Command: ${cmd.substring(0, 50)}${cmd.length > 50 ? '...' : ''}`);
+          console.log(`\nTool Called: bash`);
+          console.log(`Command: ${cmd.substring(0, 50)}${cmd.length > 50 ? '...' : ''}`);
 
           try {
             // Execute a simple ls command to count .ts files
@@ -45,10 +45,10 @@ async function main() {
               shell: '/bin/bash',
             });
             const count = output.trim();
-            console.log(`   Result: ${count} TypeScript files found`);
+            console.log(`Result: ${count} TypeScript files found`);
             return `${count}`;
           } catch (error) {
-            console.log('   Result: Error counting files');
+            console.log('Result: Error counting files');
             return 'Error: Could not count files';
           }
         },
@@ -56,18 +56,18 @@ async function main() {
     },
   });
 
-  console.log(`\n💬 Model's Response: "${result.text}"`);
+  console.log(`\nModel's Response: "${result.text}"`);
 
-  console.log('\n📊 Summary:');
-  console.log(`   • Tool calls made: ${result.toolCalls?.length || 0}`);
-  console.log(`   • Tool executed: ${result.toolResults?.length || 0} time(s)`);
-  console.log(`   • Tokens used: ${result.usage?.totalTokens || 0}`);
+  console.log('\nSummary:');
+  console.log(`- Tool calls made: ${result.toolCalls?.length || 0}`);
+  console.log(`- Tool executed: ${result.toolResults?.length || 0} time(s)`);
+  console.log(`- Tokens used: ${result.usage?.totalTokens || 0}`);
 
-  console.log('\n💡 Key Points:');
-  console.log('   1. The model calls the bash tool');
-  console.log('   2. The tool executes and returns results');
-  console.log('   3. The model describes what it will do (Codex-style)');
-  console.log('   4. It does NOT interpret the results automatically');
+  console.log('\nKey Points:');
+  console.log('1. The model calls the bash tool');
+  console.log('2. The tool executes and returns results');
+  console.log('3. The model describes what it will do (Codex-style)');
+  console.log('4. It does NOT interpret the results automatically');
 
   console.log('\n' + '='.repeat(50));
 }

@@ -10,17 +10,17 @@ import type { ModelMessage } from 'ai';
  */
 
 async function main() {
-  console.log('📚 Stateless Backend Example\n');
+  console.log('Stateless Backend Example\n');
   console.log('='.repeat(50));
-  console.log('\n⚠️  Key Concept: Backend is STATELESS');
-  console.log('   Each request needs the full conversation history\n');
+  console.log('\nKey Concept: Backend is STATELESS');
+  console.log('Each request needs the full conversation history\n');
   console.log('='.repeat(50));
 
   const provider = createChatGPTOAuth();
   const conversationHistory: ModelMessage[] = [];
 
   // First message
-  console.log('\n📝 Message 1: Asking about TypeScript');
+  console.log('\nMessage 1: Asking about TypeScript');
   conversationHistory.push({
     role: 'user',
     content: 'I work with TypeScript files. Remember this.',
@@ -31,16 +31,16 @@ async function main() {
     messages: conversationHistory,
   });
 
-  console.log(`   Assistant: "${response1.text}"`);
+  console.log(`Assistant: "${response1.text}"`);
   conversationHistory.push({
     role: 'assistant',
     content: response1.text,
   });
 
   // Second message - WITHOUT history would fail
-  console.log('\n📝 Message 2: Follow-up question');
-  console.log("   ❌ WITHOUT history: Model won't know about TypeScript");
-  console.log('   ✅ WITH history: Model remembers the context');
+  console.log('\nMessage 2: Follow-up question');
+  console.log("WITHOUT history: Model won't know about TypeScript");
+  console.log('WITH history: Model remembers the context');
 
   conversationHistory.push({
     role: 'user',
@@ -52,19 +52,19 @@ async function main() {
     messages: conversationHistory, // Must include ALL previous messages!
   });
 
-  console.log(`   Assistant: "${response2.text}"`);
+  console.log(`Assistant: "${response2.text}"`);
 
-  console.log('\n📊 What was sent in the second request:');
-  console.log(`   • Message count: ${conversationHistory.length}`);
+  console.log('\nWhat was sent in the second request:');
+  console.log(`- Message count: ${conversationHistory.length}`);
   conversationHistory.forEach((msg, i) => {
     const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
     const preview = content.substring(0, 40) + (content.length > 40 ? '...' : '');
-    console.log(`   • [${i + 1}] ${msg.role}: "${preview}"`);
+    console.log(`- [${i + 1}] ${msg.role}: "${preview}"`);
   });
 
-  console.log('\n💡 Key Takeaway:');
-  console.log("   Unlike regular chat APIs, this backend doesn't maintain state.");
-  console.log('   Your app must manage the conversation history.');
+  console.log('\nKey Takeaway:');
+  console.log("Unlike regular chat APIs, this backend doesn't maintain state.");
+  console.log('Your app must manage the conversation history.');
 
   console.log('\n' + '='.repeat(50));
 }

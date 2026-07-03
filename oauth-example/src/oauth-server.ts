@@ -64,7 +64,7 @@ export class OAuthCallbackServer {
                 </style>
               </head>
               <body>
-                <div class="error">❌ Authorization Failed</div>
+                <div class="error"> Authorization Failed</div>
                 <div class="message">Error: ${escapeHtml(error)}</div>
                 <div class="message">${escapeHtml(url.searchParams.get('error_description') || '')}</div>
               </body>
@@ -89,7 +89,7 @@ export class OAuthCallbackServer {
                 </style>
               </head>
               <body>
-                <div class="error">❌ Invalid State</div>
+                <div class="error"> Invalid State</div>
                 <div>The authorization state doesn't match. Please try again.</div>
               </body>
               </html>
@@ -123,7 +123,7 @@ export class OAuthCallbackServer {
                 </script>
               </head>
               <body>
-                <div class="success">✅ Authorization Successful!</div>
+                <div class="success"> Authorization Successful!</div>
                 <div class="message">You have successfully authorized the application.</div>
                 <div class="close-hint">This window will close automatically...</div>
               </body>
@@ -147,7 +147,7 @@ export class OAuthCallbackServer {
               </style>
             </head>
             <body>
-              <div class="error">❌ Missing authorization code</div>
+              <div class="error"> Missing authorization code</div>
             </body>
             </html>
           `);
@@ -162,7 +162,7 @@ export class OAuthCallbackServer {
 
       // Start listening
       this.server.listen(this.port, '127.0.0.1', () => {
-        console.log(`🔐 OAuth callback server listening on http://localhost:${this.port}`);
+        console.log(`OAuth callback server listening on http://localhost:${this.port}`);
       });
 
       // Set timeout

@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 /**
  * Basic JSON Generation with ChatGPT OAuth
  *
@@ -18,7 +17,7 @@ import { z } from 'zod';
 
 const chatgptOAuth = createChatGPTOAuth();
 
-console.log('🎯 ChatGPT OAuth: Basic JSON Generation\n');
+console.log('ChatGPT OAuth: Basic JSON Generation\n');
 console.log('='.repeat(60));
 
 // Helper function to extract and parse JSON from response
@@ -34,7 +33,7 @@ function parseJSON(text: string): any {
 
 // Example 1: Simple object with primitives
 async function example1_simpleObject() {
-  console.log('\n1️⃣  Simple Object with Primitives\n');
+  console.log('\n1. Simple Object with Primitives\n');
 
   const result = await generateText({
     model: chatgptOAuth('gpt-5.5'),
@@ -64,15 +63,15 @@ JSON OUTPUT:`,
       isActive: z.boolean(),
     });
     schema.parse(profile);
-    console.log('✅ Valid structure\n');
+    console.log('Valid structure\n');
   } catch (e) {
-    console.error('❌ Failed:', e.message, '\n');
+    console.error('Failed:', e.message, '\n');
   }
 }
 
 // Example 2: Object with arrays
 async function example2_arrays() {
-  console.log('2️⃣  Object with Arrays\n');
+  console.log('2. Object with Arrays\n');
 
   const result = await generateText({
     model: chatgptOAuth('gpt-5.5'),
@@ -101,15 +100,15 @@ JSON:`,
       projectCount: z.number(),
     });
     schema.parse(team);
-    console.log('✅ Valid structure\n');
+    console.log('Valid structure\n');
   } catch (e) {
-    console.error('❌ Failed:', e.message, '\n');
+    console.error('Failed:', e.message, '\n');
   }
 }
 
 // Example 3: Optional fields
 async function example3_optionalFields() {
-  console.log('3️⃣  Object with Optional Fields\n');
+  console.log('3. Object with Optional Fields\n');
 
   const result = await generateText({
     model: chatgptOAuth('gpt-5.5'),
@@ -145,15 +144,15 @@ JSON:`,
       inStock: z.boolean(),
     });
     schema.parse(product);
-    console.log('✅ Valid structure\n');
+    console.log('Valid structure\n');
   } catch (e) {
-    console.error('❌ Failed:', e.message, '\n');
+    console.error('Failed:', e.message, '\n');
   }
 }
 
 // Example 4: Different data types
 async function example4_dataTypes() {
-  console.log('4️⃣  Various Data Types\n');
+  console.log('4. Various Data Types\n');
 
   const result = await generateText({
     model: chatgptOAuth('gpt-5.5'),
@@ -190,15 +189,15 @@ OUTPUT ONLY JSON:`,
       website: z.string().url().nullable(),
     });
     schema.parse(account);
-    console.log('✅ Valid structure\n');
+    console.log('Valid structure\n');
   } catch (e) {
-    console.error('❌ Failed:', e.message, '\n');
+    console.error('Failed:', e.message, '\n');
   }
 }
 
 // Example 5: Best practices demonstration
 async function example5_bestPractices() {
-  console.log('5️⃣  Best Practices\n');
+  console.log('5. Best Practices\n');
 
   // Good: Clear instructions, explicit format, examples
   const result = await generateText({
@@ -233,9 +232,9 @@ NOW GENERATE NEW METADATA AS JSON:`,
     const metadata = parseJSON(result.text);
     console.log('Well-structured generation:');
     console.log(JSON.stringify(metadata, null, 2));
-    console.log('\n✨ Notice how clear instructions and examples lead to reliable JSON output!\n');
+    console.log('\nNotice how clear instructions and examples lead to reliable JSON output!\n');
   } catch (e) {
-    console.error('❌ Failed:', e.message, '\n');
+    console.error('Failed:', e.message, '\n');
   }
 }
 
@@ -249,19 +248,19 @@ async function main() {
     await example5_bestPractices();
 
     console.log('='.repeat(60));
-    console.log('✅ All basic examples completed successfully!');
-    console.log('\n📚 Key Takeaways:');
+    console.log('All basic examples completed successfully!');
+    console.log('\nKey Takeaways:');
     console.log('- Always specify "OUTPUT ONLY JSON" or similar');
     console.log('- Provide exact schema structure in the prompt');
     console.log('- Use examples for complex structures');
     console.log('- Validate with Zod for type safety');
     console.log('- Extract JSON from response if needed');
-    console.log('\n💡 Next steps:');
+    console.log('\nNext steps:');
     console.log('- Try generate-json-nested.ts for complex structures');
     console.log('- See generate-json-advanced.ts for production patterns');
   } catch (error) {
-    console.error('❌ Error:', error);
-    console.log('\n💡 Tip: Make sure you have valid ChatGPT OAuth credentials');
+    console.error('Error:', error);
+    console.log('\nTip: Make sure you have valid ChatGPT OAuth credentials');
     console.log('Check ~/.codex/auth.json or run: codex login');
   }
 }
