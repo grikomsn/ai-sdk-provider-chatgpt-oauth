@@ -204,6 +204,46 @@ describe('ChatGPTOAuthLanguageModel', () => {
     });
   });
 
+  it('sends maximum reasoning effort for models that advertise it', async () => {
+    const requests: CapturedRequest[] = [];
+    const fetch = createMockFetch(requests, [
+      { type: 'response.output_text.delta', delta: 'Maximum effort.' },
+      {
+        type: 'response.completed',
+        response: {
+          status: 'completed',
+          usage: { input_tokens: 2, output_tokens: 2 },
+        },
+      },
+    ]);
+    const provider = createChatGPTOAuth({
+      credentials: {
+        accessToken: 'test-token',
+        accountId: 'test-account',
+      },
+      fetch,
+    });
+
+    const result = await generateText({
+      model: provider('gpt-5.6-luna', {
+        instructions: 'Luna instructions',
+        reasoningEffort: 'max',
+      }),
+      prompt: 'Use maximum effort.',
+    });
+
+    expect(result.text).toBe('Maximum effort.');
+    expect(requests).toHaveLength(1);
+    expect(requests[0].body).toMatchObject({
+      model: 'gpt-5.6-luna',
+      instructions: 'Luna instructions',
+      reasoning: {
+        effort: 'max',
+        summary: 'auto',
+      },
+    });
+  });
+
   it('streams correctly framed V4 text parts through AI SDK v7', async () => {
     const requests: CapturedRequest[] = [];
     const fetch = createMockFetch(requests, [

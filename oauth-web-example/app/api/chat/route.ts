@@ -10,6 +10,7 @@ import {
 import { checkRateLimit } from '@/lib/auth/rate-limit';
 import { isSameOrigin, noStoreHeaders, noStoreHeadersWith } from '@/lib/auth/request';
 import { requireFreshCredentials, SessionRequiredError } from '@/lib/auth/session';
+import { fetchChatGPTModelCatalog } from '@/lib/chatgpt-models.server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -48,9 +49,17 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   let messages: UIMessage[];
+  let requestedModelId: string | undefined;
+  let requestedReasoningEffort: string | null | undefined;
   try {
-    const body = (await request.json()) as { messages?: unknown };
+    const body = (await request.json()) as {
+      messages?: unknown;
+      modelId?: unknown;
+      reasoningEffort?: unknown;
+    };
     messages = await validateUIMessages<UIMessage>({ messages: body.messages });
+    requestedModelId = optionalString(body.modelId);
+    requestedReasoningEffort = optionalNullableString(body.reasoningEffort);
   } catch {
     return Response.json(
       { error: 'The chat request is invalid.' },
@@ -58,9 +67,50 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  let catalog;
+  try {
+    catalog = await fetchChatGPTModelCatalog(credentials, request.signal);
+  } catch (error) {
+    console.error('Unable to load the ChatGPT model catalog.', error);
+    return Response.json(
+      { error: 'Unable to load the available ChatGPT models. Try again.' },
+      { status: 502, headers: noStoreHeaders }
+    );
+  }
+
+  const selectedModelId = requestedModelId ?? catalog.defaultModelId;
+  const selectedModel = catalog.models.find(({ id }) => id === selectedModelId);
+  if (!selectedModel) {
+    return Response.json(
+      { error: 'The selected ChatGPT model is not available for this account.' },
+      { status: 400, headers: noStoreHeaders }
+    );
+  }
+
+  const selectedReasoningEffort =
+    requestedReasoningEffort === undefined
+      ? selectedModel.defaultReasoningEffort
+      : requestedReasoningEffort;
+  const reasoningEffortIsValid =
+    selectedModel.reasoningEfforts.length === 0
+      ? selectedReasoningEffort === null
+      : selectedReasoningEffort !== null &&
+        selectedModel.reasoningEfforts.some(({ id }) => id === selectedReasoningEffort);
+  if (!reasoningEffortIsValid) {
+    return Response.json(
+      { error: 'The selected reasoning effort is not supported by this model.' },
+      { status: 400, headers: noStoreHeaders }
+    );
+  }
+
   const chatgpt = createChatGPTOAuth({ credentials, autoRefresh: false });
+  // The live catalog can add effort values before the installed provider's type union catches up.
+  const modelOptions = {
+    reasoningEffort: selectedReasoningEffort,
+    instructions: selectedModel.baseInstructions,
+  } as unknown as NonNullable<Parameters<typeof chatgpt>[1]>;
   const result = streamText({
-    model: chatgpt('gpt-5.5'),
+    model: chatgpt(selectedModel.id, modelOptions),
     messages: await convertToModelMessages(messages),
     abortSignal: request.signal,
   });
@@ -73,4 +123,21 @@ export async function POST(request: Request): Promise<Response> {
       onError: () => 'ChatGPT could not complete this response. Try again.',
     }),
   });
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'string' || value.length === 0 || value.length > 256) {
+    throw new TypeError('Expected a non-empty string.');
+  }
+  return value;
+}
+
+function optionalNullableString(value: unknown): string | null | undefined {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  return optionalString(value);
 }

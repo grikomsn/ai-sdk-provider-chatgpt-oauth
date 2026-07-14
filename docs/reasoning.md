@@ -26,6 +26,10 @@ Accepted AI SDK values are `provider-default`, `none`, `minimal`, `low`,
 `medium`, `high`, and `xhigh`. Individual models can support only a subset. The
 backend returns an error for an unavailable effort.
 
+Provider- and model-level `reasoningEffort` also accept `max` for models that
+advertise it. `max` is not currently part of AI SDK 7's standard call-level
+union, so configure it on the provider or selected model instead.
+
 ## Provider Defaults
 
 Set a default for every model created by a provider:
@@ -57,8 +61,10 @@ const model = chatgpt('gpt-5.5', {
 
 ## Current Catalog
 
-During verification on July 3, 2026, `gpt-5.5`, `gpt-5.4`, and
-`gpt-5.4-mini` advertised `low`, `medium`, `high`, and `xhigh`. Catalog
+During verification on July 15, 2026, GPT-5.6 Luna, Terra, and Sol advertised
+`low`, `medium`, `high`, `xhigh`, and `max`. Sol and Terra also advertised
+`ultra`, which is a Codex client orchestration mode rather than a direct
+reasoning effort; direct provider requests must use `max` or lower. Catalog
 capabilities can vary by account and change over time.
 
 When reasoning is enabled, the provider requests encrypted reasoning content and
