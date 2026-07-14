@@ -36,10 +36,14 @@ export function AuthPanel({ onAuthenticated }: AuthPanelProps) {
 
     let cancelled = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
 
     const poll = async () => {
       try {
-        const response = await fetch('/api/auth/device/poll', { method: 'POST' });
+        const response = await fetch('/api/auth/device/poll', {
+          method: 'POST',
+          signal: controller.signal,
+        });
         if (cancelled) {
           return;
         }
@@ -62,6 +66,7 @@ export function AuthPanel({ onAuthenticated }: AuthPanelProps) {
     timeout = setTimeout(poll, flow.interval * 1000);
     return () => {
       cancelled = true;
+      controller.abort();
       if (timeout) {
         clearTimeout(timeout);
       }
@@ -88,9 +93,15 @@ export function AuthPanel({ onAuthenticated }: AuthPanelProps) {
     if (!flow) {
       return;
     }
-    await navigator.clipboard.writeText(flow.userCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(flow.userCode);
+      setError(null);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+      setError('Unable to copy the code. Select it and copy it manually.');
+    }
   };
 
   return (

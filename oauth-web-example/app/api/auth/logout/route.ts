@@ -1,9 +1,14 @@
 import { isSameOrigin, noStoreHeaders } from '@/lib/auth/request';
 import { clearAuthSession, clearDeviceFlow } from '@/lib/auth/session';
 
+export const runtime = 'nodejs';
+
 export async function POST(request: Request): Promise<Response> {
   if (!isSameOrigin(request)) {
-    return Response.json({ error: 'Cross-origin request rejected.' }, { status: 403 });
+    return Response.json(
+      { error: 'Cross-origin request rejected.' },
+      { status: 403, headers: noStoreHeaders }
+    );
   }
 
   await Promise.all([clearAuthSession(), clearDeviceFlow()]);

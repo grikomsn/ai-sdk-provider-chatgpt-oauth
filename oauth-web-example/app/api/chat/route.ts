@@ -15,7 +15,10 @@ export const maxDuration = 60;
 
 export async function POST(request: Request): Promise<Response> {
   if (!isSameOrigin(request)) {
-    return Response.json({ error: 'Cross-origin request rejected.' }, { status: 403 });
+    return Response.json(
+      { error: 'Cross-origin request rejected.' },
+      { status: 403, headers: noStoreHeaders }
+    );
   }
 
   let credentials;
@@ -46,6 +49,7 @@ export async function POST(request: Request): Promise<Response> {
   });
 
   return createUIMessageStreamResponse({
+    headers: noStoreHeaders,
     stream: toUIMessageStream({
       stream: result.stream,
       originalMessages: messages,

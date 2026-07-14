@@ -57,10 +57,11 @@ function getOAuthConfig(): { issuer: string; clientId: string } {
 }
 
 function requestInit(init: RequestInit): RequestInit {
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   return {
     ...init,
     cache: 'no-store',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal,
   };
 }
 
@@ -81,7 +82,7 @@ function parseInterval(value: string | number): number {
   return Number.isFinite(interval) ? Math.min(Math.max(Math.trunc(interval), 1), 30) : 5;
 }
 
-export async function requestDeviceCode(): Promise<DeviceCodeRequest> {
+export async function requestDeviceCode(signal?: AbortSignal): Promise<DeviceCodeRequest> {
   const { issuer, clientId } = getOAuthConfig();
   const response = await fetch(
     `${issuer}/api/accounts/deviceauth/usercode`,
@@ -92,6 +93,7 @@ export async function requestDeviceCode(): Promise<DeviceCodeRequest> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ client_id: clientId }),
+      signal,
     })
   );
 
@@ -117,7 +119,8 @@ export async function requestDeviceCode(): Promise<DeviceCodeRequest> {
 
 export async function pollDeviceCode(
   deviceAuthId: string,
-  userCode: string
+  userCode: string,
+  signal?: AbortSignal
 ): Promise<DeviceCodePollResult> {
   const { issuer } = getOAuthConfig();
   const response = await fetch(
@@ -132,9 +135,12 @@ export async function pollDeviceCode(
         device_auth_id: deviceAuthId,
         user_code: userCode,
       }),
+      signal,
     })
   );
 
+  // OpenAI Codex treats both statuses as authorization-pending responses during the
+  // documented 15-minute device window.
   if (response.status === 403 || response.status === 404) {
     return { status: 'pending' };
   }
@@ -157,7 +163,8 @@ export async function pollDeviceCode(
 
 export async function exchangeDeviceCode(
   authorizationCode: string,
-  codeVerifier: string
+  codeVerifier: string,
+  signal?: AbortSignal
 ): Promise<ChatGPTOAuthCredentials> {
   const { issuer, clientId } = getOAuthConfig();
   const response = await fetch(
@@ -175,6 +182,7 @@ export async function exchangeDeviceCode(
         code_verifier: codeVerifier,
         redirect_uri: `${issuer}/deviceauth/callback`,
       }),
+      signal,
     })
   );
 
@@ -190,7 +198,8 @@ export async function exchangeDeviceCode(
 
 export async function refreshCredentials(
   refreshToken: string,
-  currentAccountId: string
+  currentAccountId: string,
+  signal?: AbortSignal
 ): Promise<ChatGPTOAuthCredentials> {
   const { issuer, clientId } = getOAuthConfig();
   const response = await fetch(
@@ -206,6 +215,7 @@ export async function refreshCredentials(
         client_id: clientId,
         refresh_token: refreshToken,
       }),
+      signal,
     })
   );
 
@@ -222,7 +232,11 @@ export async function refreshCredentials(
 }
 
 function credentialsFromTokenResponse(data: TokenResponse): ChatGPTOAuthCredentials {
-  if (!isNonEmptyString(data.access_token) || !Number.isFinite(data.expires_in)) {
+  if (
+    !isNonEmptyString(data.access_token) ||
+    !Number.isFinite(data.expires_in) ||
+    data.expires_in <= 0
+  ) {
     throw new OAuthRequestError('The OAuth server returned incomplete credentials.');
   }
 

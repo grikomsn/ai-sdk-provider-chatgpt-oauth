@@ -24,9 +24,17 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            oauth-example/package-lock.json
+            oauth-web-example/package-lock.json
       - run: npm ci
       - run: npm run check
       - run: npm ci
         working-directory: oauth-example
       - run: npm run typecheck
         working-directory: oauth-example
+      - run: npm ci
+        working-directory: oauth-web-example
+      - run: npm run check
+        working-directory: oauth-web-example

@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import type { ChatGPTOAuthCredentials } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
 import { cookies } from 'next/headers';
 import { refreshCredentials } from './openai-oauth';
+import { deriveLegacySessionKey, deriveSessionKey, validateSessionSecret } from './session-key';
 
 const SESSION_COOKIE = 'chatgpt_oauth_session';
 const DEVICE_COOKIE = 'chatgpt_oauth_device';
@@ -11,6 +12,11 @@ const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const DEVICE_MAX_AGE_SECONDS = 15 * 60;
 const REFRESH_WINDOW_MS = 5 * 60 * 1000;
 const MAX_ENCRYPTED_COOKIE_LENGTH = 3_800;
+const refreshOperations = new Map<string, Promise<ChatGPTOAuthCredentials>>();
+
+let cachedSecret: string | undefined;
+let cachedEncryptionKey: Buffer | undefined;
+let cachedLegacyEncryptionKey: Buffer | undefined;
 
 export interface DeviceFlowSession {
   deviceAuthId: string;
@@ -27,11 +33,18 @@ export class SessionRequiredError extends Error {
 }
 
 function encryptionKey(): Buffer {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error('SESSION_SECRET must contain at least 32 characters.');
+  const secret = validateSessionSecret();
+  if (cachedSecret !== secret || !cachedEncryptionKey) {
+    cachedSecret = secret;
+    cachedEncryptionKey = deriveSessionKey(secret);
+    cachedLegacyEncryptionKey = deriveLegacySessionKey(secret);
   }
-  return createHash('sha256').update(secret).digest();
+  return cachedEncryptionKey;
+}
+
+function legacyEncryptionKey(): Buffer {
+  encryptionKey();
+  return cachedLegacyEncryptionKey as Buffer;
 }
 
 function encrypt(value: object): string {
@@ -39,7 +52,7 @@ function encrypt(value: object): string {
   const cipher = createCipheriv('aes-256-gcm', encryptionKey(), iv);
   const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
   const encrypted = [
-    'v1',
+    'v2',
     iv.toString('base64url'),
     cipher.getAuthTag().toString('base64url'),
     ciphertext.toString('base64url'),
@@ -54,14 +67,14 @@ function encrypt(value: object): string {
 
 function decrypt(value: string): unknown {
   const [version, encodedIv, encodedTag, encodedCiphertext] = value.split('.');
-  if (version !== 'v1' || !encodedIv || !encodedTag || !encodedCiphertext) {
+  if (!['v1', 'v2'].includes(version) || !encodedIv || !encodedTag || !encodedCiphertext) {
     return null;
   }
 
   try {
     const decipher = createDecipheriv(
       'aes-256-gcm',
-      encryptionKey(),
+      version === 'v1' ? legacyEncryptionKey() : encryptionKey(),
       Buffer.from(encodedIv, 'base64url')
     );
     decipher.setAuthTag(Buffer.from(encodedTag, 'base64url'));
@@ -166,7 +179,19 @@ export async function requireFreshCredentials(): Promise<ChatGPTOAuthCredentials
   }
 
   try {
-    const refreshed = await refreshCredentials(credentials.refreshToken, credentials.accountId);
+    const refreshKey = createHash('sha256').update(credentials.refreshToken).digest('base64url');
+    let refreshOperation = refreshOperations.get(refreshKey);
+    if (!refreshOperation) {
+      refreshOperation = refreshCredentials(
+        credentials.refreshToken,
+        credentials.accountId
+      ).finally(() => {
+        refreshOperations.delete(refreshKey);
+      });
+      refreshOperations.set(refreshKey, refreshOperation);
+    }
+
+    const refreshed = await refreshOperation;
     await writeAuthSession(refreshed);
     return refreshed;
   } catch {
