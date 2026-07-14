@@ -33,6 +33,7 @@ interface TokenResponse {
 
 interface OAuthErrorResponse {
   error?: unknown;
+  interval?: unknown;
 }
 
 export interface DeviceCodeRequest {
@@ -44,7 +45,8 @@ export interface DeviceCodeRequest {
 }
 
 export type DeviceCodePollResult =
-  { status: 'pending' } | { status: 'complete'; authorizationCode: string; codeVerifier: string };
+  | { status: 'pending'; slowDown?: boolean; interval?: number }
+  | { status: 'complete'; authorizationCode: string; codeVerifier: string };
 
 export class OAuthRequestError extends Error {
   constructor(
@@ -172,8 +174,15 @@ export async function pollDeviceCode(
 
   if (!response.ok) {
     const errorData = (await response.json().catch(() => null)) as OAuthErrorResponse | null;
-    if (errorData?.error === 'authorization_pending' || errorData?.error === 'slow_down') {
+    if (errorData?.error === 'authorization_pending') {
       return { status: 'pending' };
+    }
+    if (errorData?.error === 'slow_down') {
+      return {
+        status: 'pending',
+        slowDown: true,
+        interval: errorData.interval === undefined ? undefined : parseInterval(errorData.interval),
+      };
     }
     throw new OAuthRequestError('ChatGPT device authorization failed.', response.status);
   }

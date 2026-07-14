@@ -26,8 +26,8 @@ Then start the app:
 npm run dev
 ```
 
-`.env.example` opts into non-secure cookies so local HTTP development works. Never set
-`ALLOW_INSECURE_COOKIES=true` on a deployed HTTPS environment.
+Cookies stay secure by default. For local HTTP development only, uncomment
+`ALLOW_INSECURE_COOKIES=true` in `.env.local`. Never enable it on a deployed HTTPS environment.
 
 Open [http://localhost:3000](http://localhost:3000), select **Continue with ChatGPT**, and complete the device-code flow.
 
@@ -63,7 +63,10 @@ Vercel overwrites the forwarded host, protocol, and client-IP headers before inv
 so the app trusts them automatically when `VERCEL=1`. For another reverse proxy, only set
 `TRUST_PROXY=true` when that proxy sanitizes and overwrites `X-Forwarded-Host`,
 `X-Forwarded-Proto`, `X-Forwarded-For`, and `X-Real-IP`. Without that opt-in, forwarded headers are
-ignored for CSRF and rate-limit decisions.
+ignored for CSRF and rate-limit decisions. The standard Web `Request` API does not expose the
+direct socket address, so an unconfigured self-hosted deployment deliberately puts all clients in
+one fail-closed rate-limit bucket. Self-hosted deployments behind a sanitizing proxy must enable
+`TRUST_PROXY=true` to get per-client buckets.
 
 Set `APP_ORIGIN` to a canonical origin such as `https://chat.example.com` when a self-hosted setup
 has a fixed public URL. This takes precedence over request and forwarded headers. Cookies are

@@ -10,6 +10,7 @@ const SESSION_COOKIE = 'chatgpt_oauth_session';
 const DEVICE_COOKIE = 'chatgpt_oauth_device';
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const REFRESH_WINDOW_MS = 5 * 60 * 1000;
+const REFRESH_RESULT_GRACE_MS = 10_000;
 const MAX_ENCRYPTED_COOKIE_LENGTH = 3_800;
 const refreshOperations = new Map<string, Promise<ChatGPTOAuthCredentials>>();
 
@@ -163,7 +164,9 @@ export async function clearDeviceFlow(): Promise<void> {
   (await cookies()).set(DEVICE_COOKIE, '', cookieOptions(0));
 }
 
-export async function requireFreshCredentials(): Promise<ChatGPTOAuthCredentials> {
+export async function requireFreshCredentials(
+  signal?: AbortSignal
+): Promise<ChatGPTOAuthCredentials> {
   const credentials = await readAuthSession();
   if (!credentials) {
     throw new SessionRequiredError();
@@ -184,11 +187,25 @@ export async function requireFreshCredentials(): Promise<ChatGPTOAuthCredentials
     if (!refreshOperation) {
       refreshOperation = refreshCredentials(
         credentials.refreshToken,
-        credentials.accountId
-      ).finally(() => {
-        refreshOperations.delete(refreshKey);
-      });
+        credentials.accountId,
+        signal
+      );
       refreshOperations.set(refreshKey, refreshOperation);
+      void refreshOperation.then(
+        () => {
+          const cleanupTimer = setTimeout(() => {
+            if (refreshOperations.get(refreshKey) === refreshOperation) {
+              refreshOperations.delete(refreshKey);
+            }
+          }, REFRESH_RESULT_GRACE_MS);
+          cleanupTimer.unref();
+        },
+        () => {
+          if (refreshOperations.get(refreshKey) === refreshOperation) {
+            refreshOperations.delete(refreshKey);
+          }
+        }
+      );
     }
 
     const refreshed = await refreshOperation;

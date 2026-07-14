@@ -9,6 +9,10 @@ describe('session key derivation', () => {
     expect(() => validateSessionSecret('correct horse battery staple correct horse')).toThrow(
       /hexadecimal or base64/
     );
+    const structuredPattern = Buffer.from(
+      Array.from({ length: 48 }, (_, index) => index % 24)
+    ).toString('hex');
+    expect(() => validateSessionSecret(structuredPattern)).toThrow(/32 random bytes/);
   });
 
   it('accepts random hexadecimal and base64 encodings', () => {
@@ -17,7 +21,7 @@ describe('session key derivation', () => {
   });
 
   it('derives a stable 256-bit scrypt key', () => {
-    const secret = '0123456789abcdef'.repeat(4);
+    const secret = randomBytes(32).toString('hex');
     const key = deriveSessionKey(secret);
 
     expect(key).toHaveLength(32);

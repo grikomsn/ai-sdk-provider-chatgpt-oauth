@@ -1,6 +1,8 @@
 import { scryptSync } from 'node:crypto';
 
 const MINIMUM_SECRET_BYTES = 32;
+const MINIMUM_UNIQUE_BYTES = 20;
+const MINIMUM_ENTROPY_BITS_PER_BYTE = 4.5;
 const KEY_LENGTH = 32;
 const SCRYPT_SALT = 'chatgpt-oauth-web-example/session/v2';
 
@@ -19,9 +21,40 @@ function decodedSecretBytes(secret: string): Buffer | null {
   return normalizedInput === normalizedOutput ? decoded : null;
 }
 
+function entropyBitsPerByte(value: Buffer): number {
+  const counts = new Map<number, number>();
+  for (const byte of value) {
+    counts.set(byte, (counts.get(byte) ?? 0) + 1);
+  }
+
+  return [...counts.values()].reduce((entropy, count) => {
+    const probability = count / value.length;
+    return entropy - probability * Math.log2(probability);
+  }, 0);
+}
+
+function isRepeatedPattern(value: Buffer): boolean {
+  for (let patternLength = 1; patternLength <= value.length / 2; patternLength += 1) {
+    if (value.length % patternLength !== 0) {
+      continue;
+    }
+    if (value.every((byte, index) => byte === value[index % patternLength])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function validateSessionSecret(secret = process.env.SESSION_SECRET): string {
   const decoded = secret ? decodedSecretBytes(secret) : null;
-  if (!secret || !decoded || decoded.length < MINIMUM_SECRET_BYTES || new Set(decoded).size < 8) {
+  if (
+    !secret ||
+    !decoded ||
+    decoded.length < MINIMUM_SECRET_BYTES ||
+    new Set(decoded).size < MINIMUM_UNIQUE_BYTES ||
+    entropyBitsPerByte(decoded) < MINIMUM_ENTROPY_BITS_PER_BYTE ||
+    isRepeatedPattern(decoded)
+  ) {
     throw new Error(
       'SESSION_SECRET must encode at least 32 random bytes as hexadecimal or base64.'
     );

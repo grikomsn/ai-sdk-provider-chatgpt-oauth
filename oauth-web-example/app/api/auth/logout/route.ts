@@ -11,6 +11,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  await Promise.all([clearAuthSession(), clearDeviceFlow()]);
+  await clearAuthSession();
+  await clearDeviceFlow();
   return Response.json({ status: 'signed-out' }, { headers: noStoreHeaders });
 }

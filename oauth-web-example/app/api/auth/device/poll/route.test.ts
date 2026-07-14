@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => {
     readDeviceFlow: vi.fn(),
     releasePollLock: vi.fn(),
     writeAuthSession: vi.fn(),
+    writeDeviceFlow: vi.fn(),
   };
 });
 
@@ -50,6 +51,7 @@ vi.mock('@/lib/auth/session', () => ({
   readDeviceFlow: mocks.readDeviceFlow,
   SessionCookieTooLargeError: mocks.SessionCookieTooLargeError,
   writeAuthSession: mocks.writeAuthSession,
+  writeDeviceFlow: mocks.writeDeviceFlow,
 }));
 
 import { POST } from './route';
@@ -73,6 +75,7 @@ beforeEach(() => {
   });
   mocks.releasePollLock.mockReset();
   mocks.writeAuthSession.mockReset().mockResolvedValue(undefined);
+  mocks.writeDeviceFlow.mockReset().mockResolvedValue(undefined);
 });
 
 describe('device poll route', () => {
@@ -95,6 +98,20 @@ describe('device poll route', () => {
     expect(response.status).toBe(503);
     expect(response.headers.get('retry-after')).toBe('5');
     expect(mocks.clearDeviceFlow).not.toHaveBeenCalled();
+  });
+
+  it('persists a longer polling interval after slow_down', async () => {
+    mocks.pollDeviceCode.mockResolvedValue({
+      status: 'pending',
+      slowDown: true,
+      interval: 8,
+    });
+
+    const response = await POST(createRequest());
+
+    expect(response.status).toBe(202);
+    expect(response.headers.get('retry-after')).toBe('10');
+    expect(mocks.writeDeviceFlow).toHaveBeenCalledWith(expect.objectContaining({ interval: 10 }));
   });
 
   it('clears the flow after a terminal OAuth rejection', async () => {
@@ -120,6 +137,37 @@ describe('device poll route', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'The ChatGPT session is too large for this cookie-based demo.',
     });
+    expect(mocks.clearDeviceFlow).toHaveBeenCalledOnce();
+  });
+
+  it('clears a consumed device flow after a successful exchange', async () => {
+    mocks.pollDeviceCode.mockResolvedValue({
+      status: 'complete',
+      authorizationCode: 'authorization-code',
+      codeVerifier: 'code-verifier',
+    });
+
+    const response = await POST(createRequest());
+
+    expect(response.status).toBe(200);
+    expect(mocks.writeAuthSession).toHaveBeenCalledOnce();
+    expect(mocks.clearDeviceFlow).toHaveBeenCalledOnce();
+  });
+
+  it('does not report pending after exchange has consumed the device code', async () => {
+    mocks.pollDeviceCode.mockResolvedValue({
+      status: 'complete',
+      authorizationCode: 'authorization-code',
+      codeVerifier: 'code-verifier',
+    });
+    mocks.writeAuthSession.mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+    const controller = new AbortController();
+    controller.abort();
+
+    const response = await POST(createRequest(controller.signal));
+
+    expect(response.status).toBe(502);
+    expect(mocks.clearDeviceFlow).toHaveBeenCalledOnce();
   });
 });
 

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
@@ -52,7 +53,7 @@ import {
 const SESSION_COOKIE = 'chatgpt_oauth_session';
 
 beforeEach(() => {
-  process.env.SESSION_SECRET = '0123456789abcdef'.repeat(4);
+  process.env.SESSION_SECRET = randomBytes(32).toString('hex');
   delete process.env.ALLOW_INSECURE_COOKIES;
   mocks.options.clear();
   mocks.values.clear();
@@ -106,12 +107,13 @@ describe('OAuth sessions', () => {
   });
 
   it('coalesces concurrent refreshes for the same token', async () => {
-    await writeAuthSession({
+    const staleCredentials = {
       accessToken: 'stale-access-token',
       accountId: 'account-id',
-      refreshToken: 'refresh-token',
+      refreshToken: 'coalesced-refresh-token',
       expiresAt: Date.now() - 1,
-    });
+    };
+    await writeAuthSession(staleCredentials);
     mocks.refreshCredentials.mockResolvedValue({
       accessToken: 'fresh-access-token',
       accountId: 'account-id',
@@ -119,18 +121,30 @@ describe('OAuth sessions', () => {
       expiresAt: Date.now() + 60 * 60 * 1000,
     });
 
+    const controller = new AbortController();
     const [first, second] = await Promise.all([
-      requireFreshCredentials(),
-      requireFreshCredentials(),
+      requireFreshCredentials(controller.signal),
+      requireFreshCredentials(controller.signal),
     ]);
 
+    // Simulate a request that arrived with the stale cookie just after the first
+    // refresh completed but before the response cookie reached the browser.
+    await writeAuthSession(staleCredentials);
+    const lateCaller = await requireFreshCredentials();
+
     expect(mocks.refreshCredentials).toHaveBeenCalledOnce();
+    expect(mocks.refreshCredentials).toHaveBeenCalledWith(
+      'coalesced-refresh-token',
+      'account-id',
+      controller.signal
+    );
     expect(first.accessToken).toBe('fresh-access-token');
     expect(second.accessToken).toBe('fresh-access-token');
+    expect(lateCaller.accessToken).toBe('fresh-access-token');
   });
 
   it('clears the cookie for a permanent refresh rejection', async () => {
-    await writeExpiredRefreshableSession();
+    await writeExpiredRefreshableSession('permanent-refresh-token');
     mocks.refreshCredentials.mockRejectedValue(new mocks.OAuthRequestError('invalid grant', 400));
 
     await expect(requireFreshCredentials()).rejects.toBeInstanceOf(SessionRequiredError);
@@ -138,7 +152,7 @@ describe('OAuth sessions', () => {
   });
 
   it('preserves the cookie when refresh fails transiently', async () => {
-    await writeExpiredRefreshableSession();
+    await writeExpiredRefreshableSession('transient-refresh-token');
     const transientError = new mocks.OAuthRequestError('upstream unavailable', 503);
     mocks.refreshCredentials.mockRejectedValue(transientError);
 
@@ -147,11 +161,11 @@ describe('OAuth sessions', () => {
   });
 });
 
-async function writeExpiredRefreshableSession(): Promise<void> {
+async function writeExpiredRefreshableSession(refreshToken: string): Promise<void> {
   await writeAuthSession({
     accessToken: 'stale-access-token',
     accountId: 'account-id',
-    refreshToken: 'refresh-token',
+    refreshToken,
     expiresAt: Date.now() - 1,
   });
 }

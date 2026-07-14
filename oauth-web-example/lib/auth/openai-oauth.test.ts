@@ -33,6 +33,21 @@ describe('OpenAI device OAuth', () => {
     });
   });
 
+  it('returns provider backoff metadata for slow_down', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(Response.json({ error: 'slow_down', interval: '12' }, { status: 400 }))
+    );
+
+    await expect(pollDeviceCode('device-id', 'USER-CODE')).resolves.toEqual({
+      status: 'pending',
+      slowDown: true,
+      interval: 12,
+    });
+  });
+
   it('treats other device polling failures as terminal', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
 

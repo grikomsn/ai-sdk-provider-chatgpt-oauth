@@ -6,6 +6,7 @@ import {
   readDeviceFlow,
   SessionCookieTooLargeError,
   writeAuthSession,
+  writeDeviceFlow,
 } from '@/lib/auth/session';
 
 export const runtime = 'nodejs';
@@ -66,10 +67,23 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  let deviceCodeConsumed = false;
   try {
     const result = await pollDeviceCode(flow.deviceAuthId, flow.userCode, request.signal);
     if (result.status === 'pending') {
-      return Response.json({ status: 'pending' }, { status: 202, headers: noStoreHeaders });
+      const retryAfter = result.slowDown
+        ? Math.min(30, Math.max(flow.interval + 5, result.interval ?? 0))
+        : flow.interval;
+      if (retryAfter !== flow.interval) {
+        await writeDeviceFlow({ ...flow, interval: retryAfter });
+      }
+      return Response.json(
+        { status: 'pending' },
+        {
+          status: 202,
+          headers: noStoreHeadersWith({ 'Retry-After': String(retryAfter) }),
+        }
+      );
     }
 
     const credentials = await exchangeDeviceCode(
@@ -77,11 +91,17 @@ export async function POST(request: Request): Promise<Response> {
       result.codeVerifier,
       request.signal
     );
-    await writeAuthSession(credentials);
-    await clearDeviceFlow();
+    deviceCodeConsumed = true;
+    try {
+      await writeAuthSession(credentials);
+    } finally {
+      // The authorization code is single-use once exchange succeeds, even if the
+      // client disconnects or persisting the new session fails afterward.
+      await clearDeviceFlow();
+    }
     return Response.json({ status: 'authenticated' }, { headers: noStoreHeaders });
   } catch (error) {
-    if (request.signal.aborted || isAbortError(error)) {
+    if (!deviceCodeConsumed && (request.signal.aborted || isAbortError(error))) {
       return Response.json(
         { status: 'pending' },
         { status: 202, headers: noStoreHeadersWith({ 'Retry-After': String(flow.interval) }) }
@@ -90,10 +110,17 @@ export async function POST(request: Request): Promise<Response> {
 
     if (error instanceof SessionCookieTooLargeError) {
       console.error('The ChatGPT OAuth session does not fit in a browser cookie.', error);
-      await clearDeviceFlow();
       return Response.json(
         { error: 'The ChatGPT session is too large for this cookie-based demo.' },
         { status: 413, headers: noStoreHeaders }
+      );
+    }
+
+    if (deviceCodeConsumed) {
+      console.error('Unable to persist the completed ChatGPT authorization.', error);
+      return Response.json(
+        { error: 'Unable to save the ChatGPT session. Start again.' },
+        { status: 502, headers: noStoreHeaders }
       );
     }
 

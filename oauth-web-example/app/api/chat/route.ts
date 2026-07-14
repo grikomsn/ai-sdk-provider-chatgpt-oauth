@@ -35,7 +35,7 @@ export async function POST(request: Request): Promise<Response> {
 
   let credentials;
   try {
-    credentials = await requireFreshCredentials();
+    credentials = await requireFreshCredentials(request.signal);
   } catch (error) {
     if (error instanceof SessionRequiredError) {
       return Response.json({ error: error.message }, { status: 401, headers: noStoreHeaders });

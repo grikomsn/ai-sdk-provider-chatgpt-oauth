@@ -79,6 +79,14 @@ describe('chat route guards', () => {
       error: 'ChatGPT is temporarily unavailable. Try again.',
     });
   });
+
+  it('passes request cancellation to credential refresh', async () => {
+    const request = createRequest();
+
+    await POST(request);
+
+    expect(mocks.requireFreshCredentials).toHaveBeenCalledWith(request.signal);
+  });
 });
 
 function createRequest(): Request {

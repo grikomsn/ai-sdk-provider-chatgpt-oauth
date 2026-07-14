@@ -36,7 +36,7 @@ jobs:
         working-directory: oauth-example
       - run: npm ci
         working-directory: oauth-web-example
+      - name: Generate test session secret
+        run: echo "SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - run: npm run check
-        env:
-          SESSION_SECRET: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
         working-directory: oauth-web-example
