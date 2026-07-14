@@ -62,7 +62,7 @@ export type ChatGPTToolChoice =
   'none' | 'auto' | 'required' | { type: 'function'; function: { name: string } };
 
 // Reasoning types based on OpenAI's reasoning API
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type ReasoningSummary = 'auto' | 'none' | 'concise' | 'detailed';
 
 export interface ChatGPTReasoning {
