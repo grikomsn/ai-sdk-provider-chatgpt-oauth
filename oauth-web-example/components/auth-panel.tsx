@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { CheckIcon, CopyIcon, ExternalLinkIcon, LoaderCircleIcon } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 interface DeviceFlow {
   userCode: string;
@@ -128,13 +129,15 @@ export function AuthPanel({ onAuthenticated }: AuthPanelProps) {
               {flow.userCode}
               {copied ? <CheckIcon /> : <CopyIcon />}
             </button>
-            <Button
-              className="w-full"
-              onClick={() => window.open(flow.verificationUrl, '_blank', 'noopener,noreferrer')}
+            <a
+              className={cn(buttonVariants(), 'w-full')}
+              href={flow.verificationUrl}
+              rel="noopener noreferrer"
+              target="_blank"
             >
               Open ChatGPT sign-in
               <ExternalLinkIcon />
-            </Button>
+            </a>
             <p className="text-xs text-muted-foreground">
               Continue only if you started this request here. The code expires in 15 minutes.
             </p>
