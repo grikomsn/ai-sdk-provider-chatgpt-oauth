@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckIcon, CopyIcon, ExternalLinkIcon, LoaderCircleIcon } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +37,16 @@ export function AuthPanel({ onAuthenticated }: AuthPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copiedTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(
+    () => () => {
+      if (copiedTimeout.current) {
+        clearTimeout(copiedTimeout.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (!flow) {
@@ -107,7 +117,13 @@ export function AuthPanel({ onAuthenticated }: AuthPanelProps) {
       await navigator.clipboard.writeText(flow.userCode);
       setError(null);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      if (copiedTimeout.current) {
+        clearTimeout(copiedTimeout.current);
+      }
+      copiedTimeout.current = setTimeout(() => {
+        setCopied(false);
+        copiedTimeout.current = undefined;
+      }, 1500);
     } catch {
       setCopied(false);
       setError('Unable to copy the code. Select it and copy it manually.');

@@ -15,12 +15,24 @@ export function trustsForwardedHeaders(): boolean {
   return process.env.VERCEL === '1' || process.env.TRUST_PROXY === 'true';
 }
 
+export function validateAppOrigin(value = process.env.APP_ORIGIN): void {
+  if (!value) {
+    return;
+  }
+
+  const url = new URL(value);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('APP_ORIGIN must be an absolute HTTP or HTTPS URL.');
+  }
+}
+
 function lastHeaderValue(value: string | null): string | undefined {
   return value?.split(',').at(-1)?.trim() || undefined;
 }
 
 function expectedOrigin(request: Request): string {
   if (process.env.APP_ORIGIN) {
+    validateAppOrigin();
     return new URL(process.env.APP_ORIGIN).origin;
   }
 

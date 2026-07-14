@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isSameOrigin } from './request';
+import { isSameOrigin, validateAppOrigin } from './request';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -47,6 +47,12 @@ describe('isSameOrigin', () => {
     });
 
     expect(isSameOrigin(request)).toBe(true);
+  });
+
+  it('validates a configured canonical origin', () => {
+    expect(() => validateAppOrigin('https://chat.example.com')).not.toThrow();
+    expect(() => validateAppOrigin('not a URL')).toThrow();
+    expect(() => validateAppOrigin('file:///tmp/chat')).toThrow(/HTTP or HTTPS/);
   });
 
   it('rejects a different, malformed, or missing origin', () => {
