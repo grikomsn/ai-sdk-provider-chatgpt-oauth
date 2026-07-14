@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { acquireOperationLock, checkRateLimit } from './rate-limit';
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe('request guards', () => {
-  it('limits repeated requests from the same forwarded client', () => {
+  it('limits repeated requests from the same Vercel client', () => {
+    vi.stubEnv('VERCEL', '1');
     const request = new Request('https://chat.example.com/api/auth/device/start', {
-      headers: { 'x-forwarded-for': '192.0.2.1' },
+      headers: { 'x-vercel-forwarded-for': '192.0.2.1' },
     });
     const scope = randomUUID();
 
@@ -14,6 +19,20 @@ describe('request guards', () => {
       allowed: false,
       retryAfterSeconds: 60,
     });
+  });
+
+  it('uses the proxy-adjacent address instead of spoofable leading values', () => {
+    vi.stubEnv('TRUST_PROXY', 'true');
+    const scope = randomUUID();
+    const first = new Request('https://chat.example.com/api/chat', {
+      headers: { 'x-forwarded-for': '198.51.100.1, 192.0.2.1' },
+    });
+    const second = new Request('https://chat.example.com/api/chat', {
+      headers: { 'x-forwarded-for': '198.51.100.2, 192.0.2.1' },
+    });
+
+    expect(checkRateLimit(first, scope, { limit: 1, windowMs: 60_000 }).allowed).toBe(true);
+    expect(checkRateLimit(second, scope, { limit: 1, windowMs: 60_000 }).allowed).toBe(false);
   });
 
   it('prevents concurrent work for the same operation key', () => {

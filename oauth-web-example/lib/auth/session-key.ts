@@ -1,17 +1,30 @@
-import { createHash, scryptSync } from 'node:crypto';
+import { scryptSync } from 'node:crypto';
 
 const MINIMUM_SECRET_BYTES = 32;
-const MINIMUM_UNIQUE_CHARACTERS = 8;
 const KEY_LENGTH = 32;
 const SCRYPT_SALT = 'chatgpt-oauth-web-example/session/v2';
 
-export function validateSessionSecret(secret = process.env.SESSION_SECRET): string {
-  if (!secret || Buffer.byteLength(secret, 'utf8') < MINIMUM_SECRET_BYTES) {
-    throw new Error('SESSION_SECRET must contain at least 32 random bytes.');
+function decodedSecretBytes(secret: string): Buffer | null {
+  if (/^[a-f\d]{64,}$/i.test(secret) && secret.length % 2 === 0) {
+    return Buffer.from(secret, 'hex');
   }
 
-  if (new Set(secret).size < MINIMUM_UNIQUE_CHARACTERS) {
-    throw new Error('SESSION_SECRET must be randomly generated, not a repeating value.');
+  if (!/^[A-Za-z\d+/_-]+={0,2}$/.test(secret)) {
+    return null;
+  }
+
+  const decoded = Buffer.from(secret, 'base64');
+  const normalizedInput = secret.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+  const normalizedOutput = decoded.toString('base64').replace(/=+$/, '');
+  return normalizedInput === normalizedOutput ? decoded : null;
+}
+
+export function validateSessionSecret(secret = process.env.SESSION_SECRET): string {
+  const decoded = secret ? decodedSecretBytes(secret) : null;
+  if (!secret || !decoded || decoded.length < MINIMUM_SECRET_BYTES || new Set(decoded).size < 8) {
+    throw new Error(
+      'SESSION_SECRET must encode at least 32 random bytes as hexadecimal or base64.'
+    );
   }
 
   return secret;
@@ -24,8 +37,4 @@ export function deriveSessionKey(secret?: string): Buffer {
     p: 1,
     maxmem: 32 * 1024 * 1024,
   });
-}
-
-export function deriveLegacySessionKey(secret?: string): Buffer {
-  return createHash('sha256').update(validateSessionSecret(secret)).digest();
 }

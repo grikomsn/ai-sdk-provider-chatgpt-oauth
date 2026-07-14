@@ -1,33 +1,55 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isSameOrigin } from './request';
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe('isSameOrigin', () => {
-  it('uses the forwarded public origin behind a reverse proxy', () => {
-    const request = new Request('http://internal:3000/api/chat', {
+  it('compares against the request URL without proxy trust', () => {
+    const request = new Request('http://localhost:3000/api/chat', {
+      headers: { host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3000' },
+    });
+
+    expect(isSameOrigin(request)).toBe(true);
+  });
+
+  it('ignores spoofed forwarded headers by default', () => {
+    const request = new Request('https://chat.example.com/api/chat', {
       headers: {
-        host: 'internal:3000',
-        origin: 'https://chat.example.com',
-        'x-forwarded-host': 'chat.example.com',
+        origin: 'https://attacker.example',
+        'x-forwarded-host': 'attacker.example',
         'x-forwarded-proto': 'https',
       },
     });
 
-    expect(isSameOrigin(request)).toBe(true);
+    expect(isSameOrigin(request)).toBe(false);
   });
 
-  it('uses the first value in forwarded header chains', () => {
+  it('uses the proxy-adjacent forwarded origin when proxy trust is explicit', () => {
+    vi.stubEnv('TRUST_PROXY', 'true');
     const request = new Request('http://internal:3000/api/chat', {
       headers: {
+        host: 'internal:3000',
         origin: 'https://chat.example.com',
-        'x-forwarded-host': 'chat.example.com, internal:3000',
-        'x-forwarded-proto': 'https, http',
+        'x-forwarded-host': 'spoofed.example, chat.example.com',
+        'x-forwarded-proto': 'http, https',
       },
     });
 
     expect(isSameOrigin(request)).toBe(true);
   });
 
-  it('rejects a different or malformed origin', () => {
+  it('prefers a configured canonical origin', () => {
+    vi.stubEnv('APP_ORIGIN', 'https://chat.example.com');
+    const request = new Request('http://internal:3000/api/chat', {
+      headers: { origin: 'https://chat.example.com' },
+    });
+
+    expect(isSameOrigin(request)).toBe(true);
+  });
+
+  it('rejects a different, malformed, or missing origin', () => {
     expect(
       isSameOrigin(
         new Request('https://chat.example.com/api/chat', {
@@ -42,9 +64,6 @@ describe('isSameOrigin', () => {
         })
       )
     ).toBe(false);
-  });
-
-  it('rejects requests without an Origin header', () => {
     expect(isSameOrigin(new Request('https://chat.example.com/api/chat'))).toBe(false);
   });
 });

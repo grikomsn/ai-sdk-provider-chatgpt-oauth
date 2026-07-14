@@ -7,7 +7,8 @@ import {
   validateUIMessages,
   type UIMessage,
 } from 'ai';
-import { isSameOrigin, noStoreHeaders } from '@/lib/auth/request';
+import { checkRateLimit } from '@/lib/auth/rate-limit';
+import { isSameOrigin, noStoreHeaders, noStoreHeadersWith } from '@/lib/auth/request';
 import { requireFreshCredentials, SessionRequiredError } from '@/lib/auth/session';
 
 export const runtime = 'nodejs';
@@ -21,13 +22,29 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  const rateLimit = checkRateLimit(request, 'chat', { limit: 20, windowMs: 60_000 });
+  if (!rateLimit.allowed) {
+    return Response.json(
+      { error: 'Too many chat requests. Try again shortly.' },
+      {
+        status: 429,
+        headers: noStoreHeadersWith({ 'Retry-After': String(rateLimit.retryAfterSeconds) }),
+      }
+    );
+  }
+
   let credentials;
   try {
     credentials = await requireFreshCredentials();
   } catch (error) {
-    const message =
-      error instanceof SessionRequiredError ? error.message : 'Unable to read session.';
-    return Response.json({ error: message }, { status: 401, headers: noStoreHeaders });
+    if (error instanceof SessionRequiredError) {
+      return Response.json({ error: error.message }, { status: 401, headers: noStoreHeaders });
+    }
+    console.error('Unable to refresh the ChatGPT session.', error);
+    return Response.json(
+      { error: 'ChatGPT is temporarily unavailable. Try again.' },
+      { status: 502, headers: noStoreHeaders }
+    );
   }
 
   let messages: UIMessage[];

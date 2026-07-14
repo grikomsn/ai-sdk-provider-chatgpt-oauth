@@ -1,9 +1,27 @@
-import { exchangeDeviceCode, pollDeviceCode } from '@/lib/auth/openai-oauth';
+import { exchangeDeviceCode, OAuthRequestError, pollDeviceCode } from '@/lib/auth/openai-oauth';
 import { acquireOperationLock, checkRateLimit } from '@/lib/auth/rate-limit';
 import { isSameOrigin, noStoreHeaders, noStoreHeadersWith } from '@/lib/auth/request';
-import { clearDeviceFlow, readDeviceFlow, writeAuthSession } from '@/lib/auth/session';
+import {
+  clearDeviceFlow,
+  readDeviceFlow,
+  SessionCookieTooLargeError,
+  writeAuthSession,
+} from '@/lib/auth/session';
 
 export const runtime = 'nodejs';
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function isTransientOAuthError(error: unknown): boolean {
+  return (
+    !(error instanceof OAuthRequestError) ||
+    error.statusCode === undefined ||
+    error.statusCode === 429 ||
+    error.statusCode >= 500
+  );
+}
 
 export async function POST(request: Request): Promise<Response> {
   if (!isSameOrigin(request)) {
@@ -63,6 +81,33 @@ export async function POST(request: Request): Promise<Response> {
     await clearDeviceFlow();
     return Response.json({ status: 'authenticated' }, { headers: noStoreHeaders });
   } catch (error) {
+    if (request.signal.aborted || isAbortError(error)) {
+      return Response.json(
+        { status: 'pending' },
+        { status: 202, headers: noStoreHeadersWith({ 'Retry-After': String(flow.interval) }) }
+      );
+    }
+
+    if (error instanceof SessionCookieTooLargeError) {
+      console.error('The ChatGPT OAuth session does not fit in a browser cookie.', error);
+      await clearDeviceFlow();
+      return Response.json(
+        { error: 'The ChatGPT session is too large for this cookie-based demo.' },
+        { status: 413, headers: noStoreHeaders }
+      );
+    }
+
+    if (isTransientOAuthError(error)) {
+      console.error('ChatGPT authorization is temporarily unavailable.', error);
+      return Response.json(
+        { error: 'ChatGPT authorization is temporarily unavailable.' },
+        {
+          status: 503,
+          headers: noStoreHeadersWith({ 'Retry-After': String(flow.interval) }),
+        }
+      );
+    }
+
     console.error('Unable to complete ChatGPT device authorization.', error);
     await clearDeviceFlow();
     return Response.json(

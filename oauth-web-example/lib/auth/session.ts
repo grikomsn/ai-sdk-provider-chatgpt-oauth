@@ -3,20 +3,18 @@ import 'server-only';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import type { ChatGPTOAuthCredentials } from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
 import { cookies } from 'next/headers';
-import { refreshCredentials } from './openai-oauth';
-import { deriveLegacySessionKey, deriveSessionKey, validateSessionSecret } from './session-key';
+import { OAuthRequestError, refreshCredentials } from './openai-oauth';
+import { deriveSessionKey, validateSessionSecret } from './session-key';
 
 const SESSION_COOKIE = 'chatgpt_oauth_session';
 const DEVICE_COOKIE = 'chatgpt_oauth_device';
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
-const DEVICE_MAX_AGE_SECONDS = 15 * 60;
 const REFRESH_WINDOW_MS = 5 * 60 * 1000;
 const MAX_ENCRYPTED_COOKIE_LENGTH = 3_800;
 const refreshOperations = new Map<string, Promise<ChatGPTOAuthCredentials>>();
 
 let cachedSecret: string | undefined;
 let cachedEncryptionKey: Buffer | undefined;
-let cachedLegacyEncryptionKey: Buffer | undefined;
 
 export interface DeviceFlowSession {
   deviceAuthId: string;
@@ -32,19 +30,20 @@ export class SessionRequiredError extends Error {
   }
 }
 
+export class SessionCookieTooLargeError extends Error {
+  constructor() {
+    super('The encrypted OAuth session is too large for a browser cookie.');
+    this.name = 'SessionCookieTooLargeError';
+  }
+}
+
 function encryptionKey(): Buffer {
   const secret = validateSessionSecret();
   if (cachedSecret !== secret || !cachedEncryptionKey) {
     cachedSecret = secret;
     cachedEncryptionKey = deriveSessionKey(secret);
-    cachedLegacyEncryptionKey = deriveLegacySessionKey(secret);
   }
   return cachedEncryptionKey;
-}
-
-function legacyEncryptionKey(): Buffer {
-  encryptionKey();
-  return cachedLegacyEncryptionKey as Buffer;
 }
 
 function encrypt(value: object): string {
@@ -59,7 +58,7 @@ function encrypt(value: object): string {
   ].join('.');
 
   if (encrypted.length > MAX_ENCRYPTED_COOKIE_LENGTH) {
-    throw new Error('The encrypted OAuth session is too large for a browser cookie.');
+    throw new SessionCookieTooLargeError();
   }
 
   return encrypted;
@@ -67,14 +66,14 @@ function encrypt(value: object): string {
 
 function decrypt(value: string): unknown {
   const [version, encodedIv, encodedTag, encodedCiphertext] = value.split('.');
-  if (!['v1', 'v2'].includes(version) || !encodedIv || !encodedTag || !encodedCiphertext) {
+  if (version !== 'v2' || !encodedIv || !encodedTag || !encodedCiphertext) {
     return null;
   }
 
   try {
     const decipher = createDecipheriv(
       'aes-256-gcm',
-      version === 'v1' ? legacyEncryptionKey() : encryptionKey(),
+      encryptionKey(),
       Buffer.from(encodedIv, 'base64url')
     );
     decipher.setAuthTag(Buffer.from(encodedTag, 'base64url'));
@@ -95,7 +94,7 @@ function cookieOptions(maxAge: number) {
     path: '/',
     priority: 'high' as const,
     sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.ALLOW_INSECURE_COOKIES !== 'true',
   };
 }
 
@@ -156,7 +155,8 @@ export async function readDeviceFlow(): Promise<DeviceFlowSession | null> {
 }
 
 export async function writeDeviceFlow(flow: DeviceFlowSession): Promise<void> {
-  (await cookies()).set(DEVICE_COOKIE, encrypt(flow), cookieOptions(DEVICE_MAX_AGE_SECONDS));
+  const maxAge = Math.max(1, Math.ceil((flow.expiresAt - Date.now()) / 1000));
+  (await cookies()).set(DEVICE_COOKIE, encrypt(flow), cookieOptions(maxAge));
 }
 
 export async function clearDeviceFlow(): Promise<void> {
@@ -194,8 +194,15 @@ export async function requireFreshCredentials(): Promise<ChatGPTOAuthCredentials
     const refreshed = await refreshOperation;
     await writeAuthSession(refreshed);
     return refreshed;
-  } catch {
-    await clearAuthSession();
-    throw new SessionRequiredError('Your ChatGPT session expired. Sign in again.');
+  } catch (error) {
+    if (
+      error instanceof OAuthRequestError &&
+      error.statusCode !== undefined &&
+      [400, 401, 403].includes(error.statusCode)
+    ) {
+      await clearAuthSession();
+      throw new SessionRequiredError('Your ChatGPT session expired. Sign in again.');
+    }
+    throw error;
   }
 }

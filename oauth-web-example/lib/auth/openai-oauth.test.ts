@@ -22,6 +22,17 @@ describe('OpenAI device OAuth', () => {
     });
   });
 
+  it('treats a structured authorization_pending response as pending', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(Response.json({ error: 'authorization_pending' }, { status: 400 }))
+    );
+
+    await expect(pollDeviceCode('device-id', 'USER-CODE')).resolves.toEqual({
+      status: 'pending',
+    });
+  });
+
   it('treats other device polling failures as terminal', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
 
@@ -49,6 +60,47 @@ describe('OpenAI device OAuth', () => {
 
     await requestDeviceCode(controller.signal);
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('uses provider-supplied device metadata when available', async () => {
+    const startedAt = Date.now();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          device_auth_id: 'device-id',
+          user_code: 'USER-CODE',
+          interval: '7',
+          expires_in: '600',
+          verification_uri: 'https://auth.openai.com/custom-device',
+        })
+      )
+    );
+
+    const result = await requestDeviceCode();
+    expect(result).toMatchObject({
+      deviceAuthId: 'device-id',
+      userCode: 'USER-CODE',
+      interval: 7,
+      verificationUrl: 'https://auth.openai.com/custom-device',
+    });
+    expect(result.expiresAt).toBeGreaterThanOrEqual(startedAt + 600_000);
+  });
+
+  it('accepts a numeric string token lifetime', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          access_token: createJwt({ sub: 'account-id' }),
+          id_token: createJwt({ sub: 'account-id' }),
+          expires_in: '3600',
+        })
+      )
+    );
+
+    const credentials = await exchangeDeviceCode('authorization-code', 'code-verifier');
+    expect(credentials.expiresAt).toBeGreaterThan(Date.now() + 3_500_000);
   });
 
   it('rejects zero or negative token lifetimes', async () => {

@@ -13,7 +13,10 @@ interface DeviceCodeResponse {
   device_auth_id: string;
   user_code?: string;
   usercode?: string;
-  interval: string | number;
+  interval?: unknown;
+  expires_in?: unknown;
+  verification_uri?: unknown;
+  verification_url?: unknown;
 }
 
 interface DeviceTokenResponse {
@@ -25,7 +28,11 @@ interface TokenResponse {
   access_token: string;
   refresh_token?: string;
   id_token?: string;
-  expires_in: number;
+  expires_in: unknown;
+}
+
+interface OAuthErrorResponse {
+  error?: unknown;
 }
 
 export interface DeviceCodeRequest {
@@ -77,9 +84,27 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
-function parseInterval(value: string | number): number {
-  const interval = typeof value === 'string' ? Number.parseInt(value, 10) : value;
+function parseInterval(value: unknown): number {
+  const interval = Number(value);
   return Number.isFinite(interval) ? Math.min(Math.max(Math.trunc(interval), 1), 30) : 5;
+}
+
+function parsePositiveSeconds(value: unknown, fallback: number): number {
+  const seconds = Math.trunc(Number(value));
+  return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 24 * 60 * 60) : fallback;
+}
+
+function parseVerificationUrl(value: unknown, issuer: string): string {
+  if (!isNonEmptyString(value)) {
+    return `${issuer}/codex/device`;
+  }
+
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : `${issuer}/codex/device`;
+  } catch {
+    return `${issuer}/codex/device`;
+  }
 }
 
 export async function requestDeviceCode(signal?: AbortSignal): Promise<DeviceCodeRequest> {
@@ -111,9 +136,9 @@ export async function requestDeviceCode(signal?: AbortSignal): Promise<DeviceCod
   return {
     deviceAuthId: data.device_auth_id,
     userCode,
-    verificationUrl: `${issuer}/codex/device`,
+    verificationUrl: parseVerificationUrl(data.verification_uri ?? data.verification_url, issuer),
     interval: parseInterval(data.interval),
-    expiresAt: Date.now() + 15 * 60 * 1000,
+    expiresAt: Date.now() + parsePositiveSeconds(data.expires_in, 15 * 60) * 1000,
   };
 }
 
@@ -146,6 +171,10 @@ export async function pollDeviceCode(
   }
 
   if (!response.ok) {
+    const errorData = (await response.json().catch(() => null)) as OAuthErrorResponse | null;
+    if (errorData?.error === 'authorization_pending' || errorData?.error === 'slow_down') {
+      return { status: 'pending' };
+    }
     throw new OAuthRequestError('ChatGPT device authorization failed.', response.status);
   }
 
@@ -232,11 +261,8 @@ export async function refreshCredentials(
 }
 
 function credentialsFromTokenResponse(data: TokenResponse): ChatGPTOAuthCredentials {
-  if (
-    !isNonEmptyString(data.access_token) ||
-    !Number.isFinite(data.expires_in) ||
-    data.expires_in <= 0
-  ) {
+  const expiresIn = Number(data.expires_in);
+  if (!isNonEmptyString(data.access_token) || !Number.isFinite(expiresIn) || expiresIn <= 0) {
     throw new OAuthRequestError('The OAuth server returned incomplete credentials.');
   }
 
@@ -253,6 +279,6 @@ function credentialsFromTokenResponse(data: TokenResponse): ChatGPTOAuthCredenti
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     accountId,
-    expiresAt: Date.now() + data.expires_in * 1000,
+    expiresAt: Date.now() + expiresIn * 1000,
   };
 }

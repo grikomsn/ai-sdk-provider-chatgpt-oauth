@@ -37,4 +37,6 @@ jobs:
       - run: npm ci
         working-directory: oauth-web-example
       - run: npm run check
+        env:
+          SESSION_SECRET: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
         working-directory: oauth-web-example

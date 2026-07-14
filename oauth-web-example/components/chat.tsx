@@ -16,24 +16,28 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
-const transport = new DefaultChatTransport({ api: '/api/chat' });
-
 interface ChatProps {
+  isSigningOut: boolean;
   onSignOut: () => void;
+  signOutError: string | null;
 }
 
-export function Chat({ onSignOut }: ChatProps) {
+export function Chat({ isSigningOut, onSignOut, signOutError }: ChatProps) {
+  const [transport] = useState(() => new DefaultChatTransport({ api: '/api/chat' }));
   const { error, messages, sendMessage, status, stop } = useChat({ transport });
   const [input, setInput] = useState('');
   const isGenerating = status === 'submitted' || status === 'streaming';
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const message = input.trim();
-    if (!message || isGenerating) {
+    if (isGenerating) {
       return;
     }
+    const message = input.trim();
     setInput('');
+    if (!message) {
+      return;
+    }
     void sendMessage({ text: message });
   };
 
@@ -51,7 +55,7 @@ export function Chat({ onSignOut }: ChatProps) {
           <span className="font-medium">ChatGPT OAuth</span>
           <Badge variant="secondary">gpt-5.5</Badge>
         </div>
-        <Button onClick={onSignOut} size="sm" variant="ghost">
+        <Button disabled={isSigningOut} onClick={onSignOut} size="sm" variant="ghost">
           <LogOutIcon />
           Sign out
         </Button>
@@ -83,9 +87,9 @@ export function Chat({ onSignOut }: ChatProps) {
       </Conversation>
 
       <div className="mx-auto w-full max-w-2xl shrink-0 space-y-3 border-t py-4">
-        {error && (
+        {(signOutError || error) && (
           <Alert variant="destructive">
-            <AlertDescription>{error.message}</AlertDescription>
+            <AlertDescription>{signOutError ?? error?.message}</AlertDescription>
           </Alert>
         )}
         <form className="relative" onSubmit={submit}>

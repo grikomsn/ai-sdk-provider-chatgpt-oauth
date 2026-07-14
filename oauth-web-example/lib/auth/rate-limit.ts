@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { trustsForwardedHeaders } from './request';
 
 interface RateLimitBucket {
   count: number;
@@ -16,19 +17,33 @@ export interface RateLimitResult {
 }
 
 const MAX_BUCKETS = 10_000;
+const PRUNE_INTERVAL_MS = 60_000;
 const buckets = new Map<string, RateLimitBucket>();
 const inFlightOperations = new Set<string>();
+let nextPruneAt = 0;
 
-function firstHeaderValue(value: string | null): string | undefined {
-  return value?.split(',')[0]?.trim() || undefined;
+function lastHeaderValue(value: string | null): string | undefined {
+  return value?.split(',').at(-1)?.trim() || undefined;
 }
 
 function clientAddress(request: Request): string {
-  return (
-    firstHeaderValue(request.headers.get('x-forwarded-for')) ??
-    firstHeaderValue(request.headers.get('x-real-ip')) ??
-    'unknown'
-  );
+  if (process.env.VERCEL === '1') {
+    return (
+      lastHeaderValue(request.headers.get('x-vercel-forwarded-for')) ??
+      lastHeaderValue(request.headers.get('x-forwarded-for')) ??
+      'unknown'
+    );
+  }
+
+  if (trustsForwardedHeaders()) {
+    return (
+      lastHeaderValue(request.headers.get('x-forwarded-for')) ??
+      lastHeaderValue(request.headers.get('x-real-ip')) ??
+      'unknown'
+    );
+  }
+
+  return 'unknown';
 }
 
 function hashKey(value: string): string {
@@ -36,9 +51,10 @@ function hashKey(value: string): string {
 }
 
 function pruneExpiredBuckets(now: number): void {
-  if (buckets.size < MAX_BUCKETS) {
+  if (now < nextPruneAt && buckets.size < MAX_BUCKETS) {
     return;
   }
+  nextPruneAt = now + PRUNE_INTERVAL_MS;
 
   for (const [key, bucket] of buckets) {
     if (bucket.resetAt <= now) {

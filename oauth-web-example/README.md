@@ -13,8 +13,8 @@ npm install
 cp .env.example .env.local
 ```
 
-Set `SESSION_SECRET` to at least 32 random bytes. Do not use a repeated value or passphrase. For
-example:
+Set `SESSION_SECRET` to at least 32 random bytes encoded as hexadecimal or base64. Passphrases are
+rejected. For example:
 
 ```bash
 openssl rand -hex 32
@@ -25,6 +25,9 @@ Then start the app:
 ```bash
 npm run dev
 ```
+
+`.env.example` opts into non-secure cookies so local HTTP development works. Never set
+`ALLOW_INSECURE_COOKIES=true` on a deployed HTTPS environment.
 
 Open [http://localhost:3000](http://localhost:3000), select **Continue with ChatGPT**, and complete the device-code flow.
 
@@ -44,10 +47,27 @@ Create a Vercel project with `oauth-web-example` as its Root Directory, add a pr
 
 The browser-based Codex OAuth client uses a localhost callback, so this hosted example intentionally uses OpenAI's device-code flow instead of an unsupported Vercel callback URL.
 
-The example applies per-client device-flow throttling and coalesces concurrent token refreshes
-within one server instance. A production multi-user deployment should replace these process-local
-guards with a durable shared rate limiter and shared session/token store so protection and refresh
-serialization work across regions and instances.
+This repository is intentionally a demo, not a production multi-user auth service. It applies
+per-client throttling to device and chat requests and coalesces concurrent token refreshes within
+one server instance. Vercel can run multiple function instances, so a production adaptation must
+replace these process-local guards with a durable shared rate limiter and shared session/token
+store.
+
+The chat route sets a 60-second maximum duration, which fits Vercel's current one-minute free-plan
+Fluid Compute limit. Keep streaming enabled and adjust the duration to match the deployment plan if
+you adapt the example.
+
+### Deployment assumptions
+
+Vercel overwrites the forwarded host, protocol, and client-IP headers before invoking a Function,
+so the app trusts them automatically when `VERCEL=1`. For another reverse proxy, only set
+`TRUST_PROXY=true` when that proxy sanitizes and overwrites `X-Forwarded-Host`,
+`X-Forwarded-Proto`, `X-Forwarded-For`, and `X-Real-IP`. Without that opt-in, forwarded headers are
+ignored for CSRF and rate-limit decisions.
+
+Set `APP_ORIGIN` to a canonical origin such as `https://chat.example.com` when a self-hosted setup
+has a fixed public URL. This takes precedence over request and forwarded headers. Cookies are
+`Secure` by default; `ALLOW_INSECURE_COOKIES=true` is only for local HTTP development.
 
 OpenAI Codex treats HTTP 403 and 404 responses from the device-token endpoint as pending while the
 15-minute device window remains active; other non-success responses terminate the flow.

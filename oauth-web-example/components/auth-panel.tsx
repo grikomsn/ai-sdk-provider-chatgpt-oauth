@@ -23,6 +23,15 @@ async function responseError(response: Response): Promise<string> {
   return typeof data?.error === 'string' ? data.error : 'The request failed. Try again.';
 }
 
+function retryDelaySeconds(response: Response, fallback: number): number {
+  const header = response.headers.get('retry-after');
+  if (header === null) {
+    return fallback;
+  }
+  const retryAfter = Number(header);
+  return Number.isFinite(retryAfter) ? Math.min(Math.max(Math.ceil(retryAfter), 1), 60) : fallback;
+}
+
 export function AuthPanel({ onAuthenticated }: AuthPanelProps) {
   const [flow, setFlow] = useState<DeviceFlow | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,8 +56,9 @@ export function AuthPanel({ onAuthenticated }: AuthPanelProps) {
         if (cancelled) {
           return;
         }
-        if (response.status === 202) {
-          timeout = setTimeout(poll, flow.interval * 1000);
+        if (response.status === 202 || response.status === 429 || response.status === 503) {
+          const delay = retryDelaySeconds(response, flow.interval);
+          timeout = setTimeout(poll, delay * 1000);
           return;
         }
         if (!response.ok) {
@@ -150,7 +160,7 @@ export function AuthPanel({ onAuthenticated }: AuthPanelProps) {
               <ExternalLinkIcon />
             </a>
             <p className="text-xs text-muted-foreground">
-              Continue only if you started this request here. The code expires in 15 minutes.
+              Continue only if you started this request here. This one-time code expires shortly.
             </p>
           </div>
         )}
