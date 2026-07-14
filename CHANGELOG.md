@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.2
+
+### Patch Changes
+
+- f1b988c: Update and pin the provider's runtime and development dependencies.
+
 ## 2.0.1
 
 ### Patch Changes
