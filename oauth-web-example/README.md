@@ -2,9 +2,7 @@
 
 A minimal Next.js 16 and AI SDK 7 chat that authenticates a ChatGPT account with Codex device-code OAuth, then streams responses through `@grikomsn/ai-sdk-provider-chatgpt-oauth`.
 
-After sign-in, the app loads every model currently listed for the account, defaults to GPT-5.6
-Luna when available, and offers only the direct reasoning-effort levels supported by the selected
-model.
+After sign-in, the app loads every model currently listed for the account, defaults to GPT-5.6 Luna when available, and offers only the direct reasoning-effort levels supported by the selected model.
 
 This is a demonstration app for a community provider that targets ChatGPT's Codex backend, not the public OpenAI API. Review the provider's [limitations](../docs/limitations.md) before adapting it for production or multi-user use.
 
