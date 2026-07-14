@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-const ignoredDirectories = new Set(['.git', 'coverage', 'dist', 'node_modules']);
+const ignoredDirectories = new Set([
+  '.agents',
+  '.git',
+  '.next',
+  '.vercel',
+  'coverage',
+  'dist',
+  'node_modules',
+]);
 
 function findMarkdownFiles(directory = '.') {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

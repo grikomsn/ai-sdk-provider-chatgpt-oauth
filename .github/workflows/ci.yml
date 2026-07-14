@@ -24,9 +24,19 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            oauth-example/package-lock.json
+            oauth-web-example/package-lock.json
       - run: npm ci
       - run: npm run check
       - run: npm ci
         working-directory: oauth-example
       - run: npm run typecheck
         working-directory: oauth-example
+      - run: npm ci
+        working-directory: oauth-web-example
+      - name: Generate test session secret
+        run: echo "SESSION_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - run: npm run check
+        working-directory: oauth-web-example

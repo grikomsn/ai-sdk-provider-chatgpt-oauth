@@ -1,0 +1,293 @@
+import 'server-only';
+
+import {
+  extractAccountIdFromToken,
+  type ChatGPTOAuthCredentials,
+} from '@grikomsn/ai-sdk-provider-chatgpt-oauth';
+
+const DEFAULT_ISSUER = 'https://auth.openai.com';
+const DEFAULT_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
+const REQUEST_TIMEOUT_MS = 15_000;
+
+interface DeviceCodeResponse {
+  device_auth_id: string;
+  user_code?: string;
+  usercode?: string;
+  interval?: unknown;
+  expires_in?: unknown;
+  verification_uri?: unknown;
+  verification_url?: unknown;
+}
+
+interface DeviceTokenResponse {
+  authorization_code: string;
+  code_verifier: string;
+}
+
+interface TokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  id_token?: string;
+  expires_in: unknown;
+}
+
+interface OAuthErrorResponse {
+  error?: unknown;
+  interval?: unknown;
+}
+
+export interface DeviceCodeRequest {
+  deviceAuthId: string;
+  userCode: string;
+  verificationUrl: string;
+  interval: number;
+  expiresAt: number;
+}
+
+export type DeviceCodePollResult =
+  | { status: 'pending'; slowDown?: boolean; interval?: number }
+  | { status: 'complete'; authorizationCode: string; codeVerifier: string };
+
+export class OAuthRequestError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode?: number
+  ) {
+    super(message);
+    this.name = 'OAuthRequestError';
+  }
+}
+
+function getOAuthConfig(): { issuer: string; clientId: string } {
+  return {
+    issuer: (process.env.CHATGPT_OAUTH_ISSUER ?? DEFAULT_ISSUER).replace(/\/$/, ''),
+    clientId: process.env.CHATGPT_OAUTH_CLIENT_ID ?? DEFAULT_CLIENT_ID,
+  };
+}
+
+function requestInit(init: RequestInit): RequestInit {
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  return {
+    ...init,
+    cache: 'no-store',
+    signal: init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal,
+  };
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new OAuthRequestError('The OAuth server returned an invalid response.', response.status);
+  }
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function parseInterval(value: unknown): number {
+  const interval = Number(value);
+  return Number.isFinite(interval) ? Math.min(Math.max(Math.trunc(interval), 1), 30) : 5;
+}
+
+function parsePositiveSeconds(value: unknown, fallback: number): number {
+  const seconds = Math.trunc(Number(value));
+  return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 24 * 60 * 60) : fallback;
+}
+
+function parseVerificationUrl(value: unknown, issuer: string): string {
+  if (!isNonEmptyString(value)) {
+    return `${issuer}/codex/device`;
+  }
+
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : `${issuer}/codex/device`;
+  } catch {
+    return `${issuer}/codex/device`;
+  }
+}
+
+export async function requestDeviceCode(signal?: AbortSignal): Promise<DeviceCodeRequest> {
+  const { issuer, clientId } = getOAuthConfig();
+  const response = await fetch(
+    `${issuer}/api/accounts/deviceauth/usercode`,
+    requestInit({
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ client_id: clientId }),
+      signal,
+    })
+  );
+
+  if (!response.ok) {
+    throw new OAuthRequestError('Unable to start ChatGPT device authorization.', response.status);
+  }
+
+  const data = await readJson<DeviceCodeResponse>(response);
+  const userCode = data.user_code ?? data.usercode;
+
+  if (!isNonEmptyString(data.device_auth_id) || !isNonEmptyString(userCode)) {
+    throw new OAuthRequestError('The OAuth server returned an incomplete device code.');
+  }
+
+  return {
+    deviceAuthId: data.device_auth_id,
+    userCode,
+    verificationUrl: parseVerificationUrl(data.verification_uri ?? data.verification_url, issuer),
+    interval: parseInterval(data.interval),
+    expiresAt: Date.now() + parsePositiveSeconds(data.expires_in, 15 * 60) * 1000,
+  };
+}
+
+export async function pollDeviceCode(
+  deviceAuthId: string,
+  userCode: string,
+  signal?: AbortSignal
+): Promise<DeviceCodePollResult> {
+  const { issuer } = getOAuthConfig();
+  const response = await fetch(
+    `${issuer}/api/accounts/deviceauth/token`,
+    requestInit({
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        device_auth_id: deviceAuthId,
+        user_code: userCode,
+      }),
+      signal,
+    })
+  );
+
+  // OpenAI Codex treats both statuses as authorization-pending responses during the
+  // documented 15-minute device window.
+  if (response.status === 403 || response.status === 404) {
+    return { status: 'pending' };
+  }
+
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => null)) as OAuthErrorResponse | null;
+    if (errorData?.error === 'authorization_pending') {
+      return { status: 'pending' };
+    }
+    if (errorData?.error === 'slow_down') {
+      return {
+        status: 'pending',
+        slowDown: true,
+        interval: errorData.interval === undefined ? undefined : parseInterval(errorData.interval),
+      };
+    }
+    throw new OAuthRequestError('ChatGPT device authorization failed.', response.status);
+  }
+
+  const data = await readJson<DeviceTokenResponse>(response);
+  if (!isNonEmptyString(data.authorization_code) || !isNonEmptyString(data.code_verifier)) {
+    throw new OAuthRequestError('The OAuth server returned an incomplete authorization code.');
+  }
+
+  return {
+    status: 'complete',
+    authorizationCode: data.authorization_code,
+    codeVerifier: data.code_verifier,
+  };
+}
+
+export async function exchangeDeviceCode(
+  authorizationCode: string,
+  codeVerifier: string,
+  signal?: AbortSignal
+): Promise<ChatGPTOAuthCredentials> {
+  const { issuer, clientId } = getOAuthConfig();
+  const response = await fetch(
+    `${issuer}/oauth/token`,
+    requestInit({
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: clientId,
+        code: authorizationCode,
+        code_verifier: codeVerifier,
+        redirect_uri: `${issuer}/deviceauth/callback`,
+      }),
+      signal,
+    })
+  );
+
+  if (!response.ok) {
+    throw new OAuthRequestError(
+      'Unable to exchange the ChatGPT authorization code.',
+      response.status
+    );
+  }
+
+  return credentialsFromTokenResponse(await readJson<TokenResponse>(response));
+}
+
+export async function refreshCredentials(
+  refreshToken: string,
+  currentAccountId: string,
+  signal?: AbortSignal
+): Promise<ChatGPTOAuthCredentials> {
+  const { issuer, clientId } = getOAuthConfig();
+  const response = await fetch(
+    `${issuer}/oauth/token`,
+    requestInit({
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: clientId,
+        refresh_token: refreshToken,
+      }),
+      signal,
+    })
+  );
+
+  if (!response.ok) {
+    throw new OAuthRequestError('Unable to refresh the ChatGPT session.', response.status);
+  }
+
+  const credentials = credentialsFromTokenResponse(await readJson<TokenResponse>(response));
+  return {
+    ...credentials,
+    refreshToken: credentials.refreshToken ?? refreshToken,
+    accountId: credentials.accountId || currentAccountId,
+  };
+}
+
+function credentialsFromTokenResponse(data: TokenResponse): ChatGPTOAuthCredentials {
+  const expiresIn = Number(data.expires_in);
+  if (!isNonEmptyString(data.access_token) || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+    throw new OAuthRequestError('The OAuth server returned incomplete credentials.');
+  }
+
+  const accountId = [data.id_token, data.access_token]
+    .filter(isNonEmptyString)
+    .map((token) => extractAccountIdFromToken(token))
+    .find(isNonEmptyString);
+
+  if (!accountId) {
+    throw new OAuthRequestError('The ChatGPT account ID was not present in the OAuth token.');
+  }
+
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    accountId,
+    expiresAt: Date.now() + expiresIn * 1000,
+  };
+}

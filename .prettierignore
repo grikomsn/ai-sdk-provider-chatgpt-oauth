@@ -2,6 +2,14 @@ dist/
 coverage/
 node_modules/
 oauth-example/node_modules/
+oauth-web-example/.agents/
+oauth-web-example/.next/
+oauth-web-example/.vercel/
+oauth-web-example/coverage/
+oauth-web-example/node_modules/
+oauth-web-example/next-env.d.ts
+oauth-web-example/out/
+oauth-web-example/skills-lock.json
 package-lock.json
 oauth-example/package-lock.json
 oauth-example/oauth-tokens.json
