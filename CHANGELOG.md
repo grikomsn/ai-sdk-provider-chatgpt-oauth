@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.3
+
+### Patch Changes
+
+- d0fdaee: Allow the `max` reasoning effort advertised by GPT-5.6 models.
+
 ## 2.0.2
 
 ### Patch Changes
